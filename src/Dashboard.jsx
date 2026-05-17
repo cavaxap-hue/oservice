@@ -4,7 +4,8 @@ import { supabase } from './supabase'
 function Dashboard({ onSair }) {
   const [tela, setTela] = useState('lista')
   const [ordens, setOrdens] = useState([])
-  const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
+  const [busca, setBusca] = useState('')
+  const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor: '' })
 
   useEffect(() => {
     carregarOrdens()
@@ -16,8 +17,8 @@ function Dashboard({ onSair }) {
   }
 
   async function salvarOS() {
-    await supabase.from('ordens').insert([{ ...form, status: 'Aguardando' }])
-    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
+    await supabase.from('ordens').insert([{ ...form, status: 'Aguardando', valor: form.valor ? parseFloat(form.valor) : null }])
+    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor: '' })
     setTela('lista')
     carregarOrdens()
   }
@@ -41,7 +42,20 @@ function Dashboard({ onSair }) {
     return { cor: '#E6A817', bg: '#FEF6E4' }
   }
 
+  function diasAberta(created_at) {
+    const dias = Math.floor((new Date() - new Date(created_at)) / (1000 * 60 * 60 * 24))
+    if (dias === 0) return 'Hoje'
+    if (dias === 1) return '1 dia'
+    return `${dias} dias`
+  }
+
   const proximoStatus = { 'Aguardando': 'Em reparo', 'Em reparo': 'Pronto', 'Pronto': 'Entregue' }
+
+  const ordensFiltradas = ordens.filter(o =>
+    o.cliente.toLowerCase().includes(busca.toLowerCase()) ||
+    o.modelo.toLowerCase().includes(busca.toLowerCase()) ||
+    o.telefone.includes(busca)
+  )
 
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#F4F6F9', display: 'flex' }}>
@@ -69,7 +83,7 @@ function Dashboard({ onSair }) {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
               {[
                 { label: 'Total', valor: ordens.length, cor: '#185FA5' },
                 { label: 'Em reparo', valor: ordens.filter(o => o.status === 'Em reparo').length, cor: '#E6A817' },
@@ -83,11 +97,20 @@ function Dashboard({ onSair }) {
               ))}
             </div>
 
+            <div style={{ marginBottom: '16px' }}>
+              <input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="🔍 Buscar por cliente, modelo ou telefone..."
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', background: '#fff' }}
+              />
+            </div>
+
             <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #E0E0E0', overflow: 'hidden' }}>
-              {ordens.length === 0 ? (
+              {ordensFiltradas.length === 0 ? (
                 <div style={{ padding: '48px', textAlign: 'center', color: '#999' }}>
-                  <p style={{ fontSize: '16px', marginBottom: '8px' }}>Nenhuma OS cadastrada ainda</p>
-                  <p style={{ fontSize: '13px' }}>Clique em + Nova OS para começar</p>
+                  <p style={{ fontSize: '16px', marginBottom: '8px' }}>{busca ? 'Nenhuma OS encontrada' : 'Nenhuma OS cadastrada ainda'}</p>
+                  <p style={{ fontSize: '13px' }}>{busca ? 'Tente outro termo de busca' : 'Clique em + Nova OS para começar'}</p>
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -96,13 +119,15 @@ function Dashboard({ onSair }) {
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Cliente</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Equipamento</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Problema</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Valor</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Tempo</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Status</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Ação</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ordens.map((os) => {
+                    {ordensFiltradas.map((os) => {
                       const { cor, bg } = statusCor(os.status)
                       return (
                         <tr key={os.id} style={{ borderTop: '1px solid #F0F0F0' }}>
@@ -111,7 +136,16 @@ function Dashboard({ onSair }) {
                             <div style={{ fontSize: '12px', color: '#999' }}>{os.telefone}</div>
                           </td>
                           <td style={{ padding: '14px 16px', color: '#666' }}>{os.tipo} — {os.modelo}</td>
-                          <td style={{ padding: '14px 16px', color: '#666', maxWidth: '180px' }}>{os.problema}</td>
+                          <td style={{ padding: '14px 16px', color: '#666', maxWidth: '160px' }}>
+                            <div>{os.problema}</div>
+                            {os.observacoes && <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>📝 {os.observacoes}</div>}
+                          </td>
+                          <td style={{ padding: '14px 16px', color: '#333', fontWeight: '500' }}>
+                            {os.valor ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '14px 16px', color: '#999', fontSize: '12px' }}>
+                            {diasAberta(os.created_at)}
+                          </td>
                           <td style={{ padding: '14px 16px' }}>
                             <span style={{ background: bg, color: cor, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500' }}>
                               {os.status}
@@ -126,7 +160,7 @@ function Dashboard({ onSair }) {
                           </td>
                           <td style={{ padding: '14px 16px' }}>
                             <button onClick={() => excluirOS(os.id)} style={{ background: 'none', color: '#E63946', border: '1px solid #E63946', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                              🗑 Excluir
+                              🗑
                             </button>
                           </td>
                         </tr>
@@ -179,9 +213,19 @@ function Dashboard({ onSair }) {
                 </div>
               </div>
 
-              <div style={{ marginBottom: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Problema relatado</label>
-                <textarea value={form.problema} onChange={e => setForm({ ...form, problema: e.target.value })} placeholder="Descreva o que o cliente relatou..." rows={4} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', resize: 'vertical' }} />
+                <textarea value={form.problema} onChange={e => setForm({ ...form, problema: e.target.value })} placeholder="Descreva o que o cliente relatou..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', resize: 'vertical' }} />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Observações técnicas</label>
+                <textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} placeholder="O que foi feito, peças trocadas, diagnóstico..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', resize: 'vertical' }} />
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Valor do serviço (R$)</label>
+                <input value={form.valor} onChange={e => setForm({ ...form, valor: e.target.value })} type="number" placeholder="0,00" style={{ width: '200px', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
