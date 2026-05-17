@@ -16,11 +16,14 @@ function Dashboard() {
   }
 
   async function salvarOS() {
-    const { data, error } = await supabase.from('ordens').insert([{ ...form, status: 'Aguardando' }])
-    console.log('data:', data)
-    console.log('error:', error)
+    await supabase.from('ordens').insert([{ ...form, status: 'Aguardando' }])
     setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
     setTela('lista')
+    carregarOrdens()
+  }
+
+  async function mudarStatus(id, novoStatus) {
+    await supabase.from('ordens').update({ status: novoStatus }).eq('id', id)
     carregarOrdens()
   }
 
@@ -31,9 +34,11 @@ function Dashboard() {
     return { cor: '#E6A817', bg: '#FEF6E4' }
   }
 
+  const proximoStatus = { 'Aguardando': 'Em reparo', 'Em reparo': 'Pronto', 'Pronto': 'Entregue' }
+
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#F4F6F9', display: 'flex' }}>
-      
+
       {/* Sidebar */}
       <div style={{ width: '220px', background: '#fff', borderRight: '1px solid #E0E0E0', padding: '24px 0', flexShrink: 0 }}>
         <div style={{ padding: '0 20px 24px', borderBottom: '1px solid #E0E0E0', marginBottom: '8px' }}>
@@ -46,7 +51,7 @@ function Dashboard() {
         <div style={{ padding: '8px 20px', fontSize: '14px', color: '#666', cursor: 'pointer' }}>⚙️ Configurações</div>
       </div>
 
-      {/* Conteudo principal */}
+      {/* Conteudo */}
       <div style={{ flex: 1, padding: '32px' }}>
 
         {tela === 'lista' && (
@@ -86,7 +91,7 @@ function Dashboard() {
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Equipamento</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Problema</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Status</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Data</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -99,14 +104,20 @@ function Dashboard() {
                             <div style={{ fontSize: '12px', color: '#999' }}>{os.telefone}</div>
                           </td>
                           <td style={{ padding: '14px 16px', color: '#666' }}>{os.tipo} — {os.modelo}</td>
-                          <td style={{ padding: '14px 16px', color: '#666', maxWidth: '200px' }}>{os.problema}</td>
+                          <td style={{ padding: '14px 16px', color: '#666', maxWidth: '180px' }}>{os.problema}</td>
                           <td style={{ padding: '14px 16px' }}>
                             <span style={{ background: bg, color: cor, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500' }}>
                               {os.status}
                             </span>
                           </td>
-                          <td style={{ padding: '14px 16px', color: '#999', fontSize: '13px' }}>
-                            {new Date(os.created_at).toLocaleDateString('pt-BR')}
+                          <td style={{ padding: '14px 16px' }}>
+                            {proximoStatus[os.status] && (
+                              <button
+                                onClick={() => mudarStatus(os.id, proximoStatus[os.status])}
+                                style={{ background: '#F4F6F9', color: '#333', border: '1px solid #E0E0E0', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                                → {proximoStatus[os.status]}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )
@@ -128,9 +139,7 @@ function Dashboard() {
             </div>
 
             <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #E0E0E0', padding: '24px', maxWidth: '600px' }}>
-              
               <p style={{ fontSize: '12px', fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '16px' }}>Dados do cliente</p>
-              
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Nome do cliente</label>
@@ -143,7 +152,6 @@ function Dashboard() {
               </div>
 
               <p style={{ fontSize: '12px', fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '16px', marginTop: '24px' }}>Equipamento</p>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Tipo</label>
@@ -174,7 +182,6 @@ function Dashboard() {
                   Abrir OS
                 </button>
               </div>
-
             </div>
           </>
         )}
