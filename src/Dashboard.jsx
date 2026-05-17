@@ -27,6 +27,13 @@ function Dashboard({ onSair }) {
     carregarOrdens()
   }
 
+  async function excluirOS(id) {
+    if (window.confirm('Tem certeza que deseja excluir esta OS?')) {
+      await supabase.from('ordens').delete().eq('id', id)
+      carregarOrdens()
+    }
+  }
+
   function statusCor(status) {
     if (status === 'Em reparo') return { cor: '#185FA5', bg: '#EEF4FB' }
     if (status === 'Pronto') return { cor: '#2E9E52', bg: '#E8F5EE' }
@@ -39,12 +46,11 @@ function Dashboard({ onSair }) {
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#F4F6F9', display: 'flex' }}>
 
-      {/* Sidebar */}
       <div style={{ width: '220px', background: '#fff', borderRight: '1px solid #E0E0E0', padding: '24px 0', flexShrink: 0 }}>
         <div style={{ padding: '0 20px 24px', borderBottom: '1px solid #E0E0E0', marginBottom: '8px' }}>
           <h2 style={{ fontSize: '20px', color: '#185FA5', margin: 0 }}>OService</h2>
           <small style={{ color: '#999', fontSize: '12px' }}>Painel principal</small>
-<button onClick={onSair} style={{ marginTop: '8px', background: 'none', border: 'none', color: '#999', fontSize: '12px', cursor: 'pointer', padding: 0 }}>Sair →</button>
+          <button onClick={onSair} style={{ marginTop: '8px', display: 'block', background: 'none', border: 'none', color: '#999', fontSize: '12px', cursor: 'pointer', padding: 0 }}>Sair →</button>
         </div>
         <div onClick={() => setTela('lista')} style={{ padding: '8px 20px', fontSize: '14px', color: tela === 'lista' ? '#185FA5' : '#666', fontWeight: tela === 'lista' ? '500' : 'normal', background: tela === 'lista' ? '#EEF4FB' : 'transparent', borderRight: tela === 'lista' ? '3px solid #185FA5' : 'none', cursor: 'pointer' }}>📋 Ordens de Serviço</div>
         <div style={{ padding: '8px 20px', fontSize: '14px', color: '#666', cursor: 'pointer' }}>👥 Clientes</div>
@@ -52,7 +58,6 @@ function Dashboard({ onSair }) {
         <div style={{ padding: '8px 20px', fontSize: '14px', color: '#666', cursor: 'pointer' }}>⚙️ Configurações</div>
       </div>
 
-      {/* Conteudo */}
       <div style={{ flex: 1, padding: '32px' }}>
 
         {tela === 'lista' && (
@@ -93,6 +98,7 @@ function Dashboard({ onSair }) {
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Problema</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Status</th>
                       <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Ação</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -113,12 +119,15 @@ function Dashboard({ onSair }) {
                           </td>
                           <td style={{ padding: '14px 16px' }}>
                             {proximoStatus[os.status] && (
-                              <button
-                                onClick={() => mudarStatus(os.id, proximoStatus[os.status])}
-                                style={{ background: '#F4F6F9', color: '#333', border: '1px solid #E0E0E0', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                              <button onClick={() => mudarStatus(os.id, proximoStatus[os.status])} style={{ background: '#F4F6F9', color: '#333', border: '1px solid #E0E0E0', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
                                 → {proximoStatus[os.status]}
                               </button>
                             )}
+                          </td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <button onClick={() => excluirOS(os.id)} style={{ background: 'none', color: '#E63946', border: '1px solid #E63946', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                              🗑 Excluir
+                            </button>
                           </td>
                         </tr>
                       )
