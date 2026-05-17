@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 
-function Dashboard() {
+function Dashboard({ onSair }) {
   const [tela, setTela] = useState('lista')
   const [ordens, setOrdens] = useState([])
   const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
@@ -44,6 +44,7 @@ function Dashboard() {
         <div style={{ padding: '0 20px 24px', borderBottom: '1px solid #E0E0E0', marginBottom: '8px' }}>
           <h2 style={{ fontSize: '20px', color: '#185FA5', margin: 0 }}>OService</h2>
           <small style={{ color: '#999', fontSize: '12px' }}>Painel principal</small>
+<button onClick={onSair} style={{ marginTop: '8px', background: 'none', border: 'none', color: '#999', fontSize: '12px', cursor: 'pointer', padding: 0 }}>Sair →</button>
         </div>
         <div onClick={() => setTela('lista')} style={{ padding: '8px 20px', fontSize: '14px', color: tela === 'lista' ? '#185FA5' : '#666', fontWeight: tela === 'lista' ? '500' : 'normal', background: tela === 'lista' ? '#EEF4FB' : 'transparent', borderRight: tela === 'lista' ? '3px solid #185FA5' : 'none', cursor: 'pointer' }}>📋 Ordens de Serviço</div>
         <div style={{ padding: '8px 20px', fontSize: '14px', color: '#666', cursor: 'pointer' }}>👥 Clientes</div>
