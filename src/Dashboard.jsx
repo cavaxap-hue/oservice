@@ -5,6 +5,7 @@ function Dashboard({ onSair }) {
   const [tela, setTela] = useState('lista')
   const [ordens, setOrdens] = useState([])
   const [busca, setBusca] = useState('')
+const [filtroStatus, setFiltroStatus] = useState('')
   const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor: '' })
 
   useEffect(() => {
@@ -51,11 +52,13 @@ function Dashboard({ onSair }) {
 
   const proximoStatus = { 'Aguardando': 'Em reparo', 'Em reparo': 'Pronto', 'Pronto': 'Entregue' }
 
-  const ordensFiltradas = ordens.filter(o =>
-    o.cliente.toLowerCase().includes(busca.toLowerCase()) ||
-    o.modelo.toLowerCase().includes(busca.toLowerCase()) ||
-    o.telefone.includes(busca)
-  )
+  const ordensFiltradas = ordens.filter(o => {
+    const buscaOk = o.cliente.toLowerCase().includes(busca.toLowerCase()) ||
+      o.modelo.toLowerCase().includes(busca.toLowerCase()) ||
+      o.telefone.includes(busca)
+    const filtroOk = filtroStatus === '' || o.status === filtroStatus
+    return buscaOk && filtroOk
+  })
 
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#F4F6F9', display: 'flex' }}>
@@ -84,17 +87,17 @@ function Dashboard({ onSair }) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-              {[
-                { label: 'Total', valor: ordens.length, cor: '#185FA5' },
-                { label: 'Em reparo', valor: ordens.filter(o => o.status === 'Em reparo').length, cor: '#E6A817' },
-                { label: 'Prontas', valor: ordens.filter(o => o.status === 'Pronto').length, cor: '#2E9E52' },
-                { label: 'Aguardando', valor: ordens.filter(o => o.status === 'Aguardando').length, cor: '#E63946' },
-              ].map((card) => (
-                <div key={card.label} style={{ background: '#fff', borderRadius: '10px', padding: '20px', border: '1px solid #E0E0E0' }}>
-                  <p style={{ fontSize: '12px', color: '#999', margin: '0 0 8px' }}>{card.label}</p>
-                  <p style={{ fontSize: '28px', fontWeight: '600', color: card.cor, margin: 0 }}>{card.valor}</p>
-                </div>
-              ))}
+            {[
+  { label: 'Total', valor: ordens.length, cor: '#185FA5', filtro: '' },
+  { label: 'Em reparo', valor: ordens.filter(o => o.status === 'Em reparo').length, cor: '#E6A817', filtro: 'Em reparo' },
+  { label: 'Prontas', valor: ordens.filter(o => o.status === 'Pronto').length, cor: '#2E9E52', filtro: 'Pronto' },
+  { label: 'Aguardando', valor: ordens.filter(o => o.status === 'Aguardando').length, cor: '#E63946', filtro: 'Aguardando' },
+].map((card) => (
+  <div key={card.label} onClick={() => setFiltroStatus(filtroStatus === card.filtro ? '' : card.filtro)} style={{ background: filtroStatus === card.filtro ? card.cor : '#fff', borderRadius: '10px', padding: '20px', border: `1px solid ${filtroStatus === card.filtro ? card.cor : '#E0E0E0'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+    <p style={{ fontSize: '12px', color: filtroStatus === card.filtro ? 'rgba(255,255,255,0.8)' : '#999', margin: '0 0 8px' }}>{card.label}</p>
+    <p style={{ fontSize: '28px', fontWeight: '600', color: filtroStatus === card.filtro ? '#fff' : card.cor, margin: 0 }}>{card.valor}</p>
+  </div>
+))} 
             </div>
 
             <div style={{ marginBottom: '16px' }}>
