@@ -1,7 +1,35 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from './supabase'
 
 function Dashboard() {
   const [tela, setTela] = useState('lista')
+  const [ordens, setOrdens] = useState([])
+  const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
+
+  useEffect(() => {
+    carregarOrdens()
+  }, [])
+
+  async function carregarOrdens() {
+    const { data } = await supabase.from('ordens').select('*').order('created_at', { ascending: false })
+    if (data) setOrdens(data)
+  }
+
+  async function salvarOS() {
+    const { data, error } = await supabase.from('ordens').insert([{ ...form, status: 'Aguardando' }])
+    console.log('data:', data)
+    console.log('error:', error)
+    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '' })
+    setTela('lista')
+    carregarOrdens()
+  }
+
+  function statusCor(status) {
+    if (status === 'Em reparo') return { cor: '#185FA5', bg: '#EEF4FB' }
+    if (status === 'Pronto') return { cor: '#2E9E52', bg: '#E8F5EE' }
+    if (status === 'Entregue') return { cor: '#666', bg: '#F0F0F0' }
+    return { cor: '#E6A817', bg: '#FEF6E4' }
+  }
 
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#F4F6F9', display: 'flex' }}>
@@ -32,10 +60,10 @@ function Dashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
               {[
-                { label: 'Total abertas', valor: '24', cor: '#185FA5' },
-                { label: 'Em reparo', valor: '8', cor: '#E6A817' },
-                { label: 'Prontas', valor: '5', cor: '#2E9E52' },
-                { label: 'Atrasadas', valor: '2', cor: '#E63946' },
+                { label: 'Total', valor: ordens.length, cor: '#185FA5' },
+                { label: 'Em reparo', valor: ordens.filter(o => o.status === 'Em reparo').length, cor: '#E6A817' },
+                { label: 'Prontas', valor: ordens.filter(o => o.status === 'Pronto').length, cor: '#2E9E52' },
+                { label: 'Aguardando', valor: ordens.filter(o => o.status === 'Aguardando').length, cor: '#E63946' },
               ].map((card) => (
                 <div key={card.label} style={{ background: '#fff', borderRadius: '10px', padding: '20px', border: '1px solid #E0E0E0' }}>
                   <p style={{ fontSize: '12px', color: '#999', margin: '0 0 8px' }}>{card.label}</p>
@@ -45,37 +73,47 @@ function Dashboard() {
             </div>
 
             <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #E0E0E0', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                <thead>
-                  <tr style={{ background: '#F9FAFB' }}>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>OS</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Cliente</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Equipamento</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Status</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { num: '#0051', cliente: 'João Silva', equip: 'Notebook Dell', status: 'Em reparo', cor: '#185FA5', bg: '#EEF4FB', data: '12/05' },
-                    { num: '#0050', cliente: 'Maria Souza', equip: 'Nobreak APC', status: 'Pronto', cor: '#2E9E52', bg: '#E8F5EE', data: '11/05' },
-                    { num: '#0049', cliente: 'Carlos Mendes', equip: 'Notebook HP', status: 'Aguardando', cor: '#E6A817', bg: '#FEF6E4', data: '10/05' },
-                    { num: '#0048', cliente: 'Ana Paula', equip: 'Placa-mãe Asus', status: 'Em reparo', cor: '#185FA5', bg: '#EEF4FB', data: '09/05' },
-                  ].map((os) => (
-                    <tr key={os.num} style={{ borderTop: '1px solid #F0F0F0' }}>
-                      <td style={{ padding: '14px 16px', color: '#999', fontFamily: 'monospace' }}>{os.num}</td>
-                      <td style={{ padding: '14px 16px', color: '#333', fontWeight: '500' }}>{os.cliente}</td>
-                      <td style={{ padding: '14px 16px', color: '#666' }}>{os.equip}</td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <span style={{ background: os.bg, color: os.cor, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500' }}>
-                          {os.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 16px', color: '#999' }}>{os.data}</td>
+              {ordens.length === 0 ? (
+                <div style={{ padding: '48px', textAlign: 'center', color: '#999' }}>
+                  <p style={{ fontSize: '16px', marginBottom: '8px' }}>Nenhuma OS cadastrada ainda</p>
+                  <p style={{ fontSize: '13px' }}>Clique em + Nova OS para começar</p>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ background: '#F9FAFB' }}>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Cliente</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Equipamento</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Problema</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Status</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', color: '#999', fontWeight: '500', fontSize: '12px' }}>Data</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {ordens.map((os) => {
+                      const { cor, bg } = statusCor(os.status)
+                      return (
+                        <tr key={os.id} style={{ borderTop: '1px solid #F0F0F0' }}>
+                          <td style={{ padding: '14px 16px', color: '#333', fontWeight: '500' }}>
+                            <div>{os.cliente}</div>
+                            <div style={{ fontSize: '12px', color: '#999' }}>{os.telefone}</div>
+                          </td>
+                          <td style={{ padding: '14px 16px', color: '#666' }}>{os.tipo} — {os.modelo}</td>
+                          <td style={{ padding: '14px 16px', color: '#666', maxWidth: '200px' }}>{os.problema}</td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <span style={{ background: bg, color: cor, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500' }}>
+                              {os.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px', color: '#999', fontSize: '13px' }}>
+                            {new Date(os.created_at).toLocaleDateString('pt-BR')}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </>
         )}
@@ -96,11 +134,11 @@ function Dashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Nome do cliente</label>
-                  <input type="text" placeholder="Ex: João Silva" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
+                  <input value={form.cliente} onChange={e => setForm({ ...form, cliente: e.target.value })} type="text" placeholder="Ex: João Silva" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Telefone / WhatsApp</label>
-                  <input type="text" placeholder="(49) 99999-0000" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
+                  <input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} type="text" placeholder="(49) 99999-0000" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
 
@@ -109,7 +147,7 @@ function Dashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Tipo</label>
-                  <select style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', background: '#fff' }}>
+                  <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', background: '#fff' }}>
                     <option>Notebook</option>
                     <option>Nobreak</option>
                     <option>Placa-mãe</option>
@@ -119,20 +157,20 @@ function Dashboard() {
                 </div>
                 <div>
                   <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Marca / Modelo</label>
-                  <input type="text" placeholder="Ex: Dell Inspiron 15" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
+                  <input value={form.modelo} onChange={e => setForm({ ...form, modelo: e.target.value })} type="text" placeholder="Ex: Dell Inspiron 15" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none' }} />
                 </div>
               </div>
 
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ fontSize: '13px', color: '#555', display: 'block', marginBottom: '6px' }}>Problema relatado</label>
-                <textarea placeholder="Descreva o que o cliente relatou..." rows={4} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', resize: 'vertical' }} />
+                <textarea value={form.problema} onChange={e => setForm({ ...form, problema: e.target.value })} placeholder="Descreva o que o cliente relatou..." rows={4} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #DDD', fontSize: '14px', outline: 'none', resize: 'vertical' }} />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setTela('lista')} style={{ background: '#fff', color: '#666', border: '1px solid #DDD', padding: '10px 20px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}>
                   Cancelar
                 </button>
-                <button onClick={() => setTela('lista')} style={{ background: '#185FA5', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', fontWeight: '500' }}>
+                <button onClick={salvarOS} style={{ background: '#185FA5', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', fontWeight: '500' }}>
                   Abrir OS
                 </button>
               </div>
