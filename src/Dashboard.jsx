@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Clientes from './Clientes'
+import Configuracoes from './Configuracoes'
 import Logo from './Logo'
 import { cores, STATUS, STATUS_ABERTOS, STATUS_FINAIS, STATUS_INICIAL } from './theme'
 
@@ -16,6 +17,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   const [novoCliente, setNovoCliente] = useState({ nome: '', telefone: '', email: '', cpf: '', endereco: '' })
   const [relInicio, setRelInicio] = useState('')
   const [relFim, setRelFim] = useState('')
+  const [relStatus, setRelStatus] = useState('')
   const [hoverCard, setHoverCard] = useState(null)
   const [menuMobileAberto, setMenuMobileAberto] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -119,31 +121,53 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
     setTela('editar')
   }
 
-  function imprimirOS(os) {
+  async function imprimirOS(os) {
+    const { data: cfg } = await supabase.from('configuracoes').select('*').limit(1).single()
+    const empresa = cfg || {}
     const janela = window.open('', '_blank')
     janela.document.write(`
       <html>
         <head>
           <title>OS #${String(os.numero).padStart(4, '0')}</title>
           <style>
-            body { font-family: sans-serif; padding: 32px; color: #333; max-width: 600px; margin: 0 auto; }
-            h1 { color: #185FA5; margin-bottom: 4px; }
-            .sub { color: #999; font-size: 13px; margin-bottom: 32px; }
-            .numero { font-size: 22px; font-weight: 600; margin-bottom: 24px; }
-            .secao { margin-bottom: 20px; }
-            .secao label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
-            .secao p { font-size: 15px; margin: 0; }
+            body { font-family: sans-serif; padding: 32px; color: #333; max-width: 680px; margin: 0 auto; }
+            .cabecalho { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid #185FA5; }
+            .empresa-info { flex: 1; }
+            .empresa-nome { font-size: 18px; font-weight: 700; color: #185FA5; margin-bottom: 4px; }
+            .empresa-detalhe { font-size: 12px; color: #666; line-height: 1.6; }
+            .logo-box { max-width: 160px; max-height: 70px; object-fit: contain; }
+            .numero { font-size: 22px; font-weight: 600; margin-bottom: 20px; color: #333; }
+            .secao { margin-bottom: 16px; }
+            .secao label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 3px; }
+            .secao p { font-size: 14px; margin: 0; color: #333; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; background: #EEF4FB; color: #185FA5; }
-            .rodape { margin-top: 48px; border-top: 1px solid #E0E0E0; padding-top: 16px; font-size: 12px; color: #999; }
-            .assinatura { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 48px; }
-            .linha { border-top: 1px solid #333; padding-top: 8px; font-size: 12px; color: #666; }
+            .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; background: #EEF4FB; color: #185FA5; }
+            .rodape { margin-top: 40px; border-top: 1px solid #E0E0E0; padding-top: 12px; font-size: 11px; color: #aaa; display: flex; justify-content: space-between; }
+            .assinatura { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 40px; }
+            .linha-assinatura { border-top: 1px solid #333; padding-top: 8px; font-size: 12px; color: #666; }
           </style>
         </head>
         <body>
-          <h1>Supradesk</h1>
-          <p class="sub">Ordem de Serviço</p>
-          <p class="numero">OS #${String(os.numero).padStart(4, '0')}</p>
+          <div class="cabecalho">
+            <div class="empresa-info">
+              ${empresa.logo_url ? `<img src="${empresa.logo_url}" class="logo-box" alt="Logo" />` : ''}
+              <div class="empresa-nome">${empresa.nome_empresa || 'Supradesk'}</div>
+              <div class="empresa-detalhe">
+                ${empresa.cnpj ? `CNPJ: ${empresa.cnpj}<br>` : ''}
+                ${empresa.telefone ? `Tel: ${empresa.telefone}<br>` : ''}
+                ${empresa.email ? `${empresa.email}<br>` : ''}
+                ${empresa.endereco ? `${empresa.endereco}${empresa.bairro ? ', ' + empresa.bairro : ''}${empresa.cidade ? ' — ' + empresa.cidade : ''}${empresa.cep ? ' — CEP ' + empresa.cep : ''}<br>` : ''}
+                ${empresa.site ? empresa.site : ''}
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px; color:#999; margin-bottom:4px;">ORDEM DE SERVIÇO</div>
+              <div style="font-size:28px; font-weight:700; color:#185FA5;">#${String(os.numero).padStart(4, '0')}</div>
+              <div style="font-size:12px; color:#666;">Abertura: ${new Date(os.created_at).toLocaleDateString('pt-BR')}</div>
+              ${os.fechada_em ? `<div style="font-size:12px; color:#1D9E75;">Fechamento: ${new Date(os.fechada_em).toLocaleDateString('pt-BR')}</div>` : ''}
+            </div>
+          </div>
+
           <div class="grid">
             <div class="secao"><label>Cliente</label><p>${os.cliente}</p></div>
             <div class="secao"><label>Telefone</label><p>${os.telefone}</p></div>
@@ -154,13 +178,17 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
           </div>
           <div class="secao"><label>Problema relatado</label><p>${os.problema}</p></div>
           ${os.observacoes ? `<div class="secao"><label>Observações técnicas</label><p>${os.observacoes}</p></div>` : ''}
-          ${os.valor ? `<div class="secao"><label>Valor do serviço</label><p>R$ ${parseFloat(os.valor).toFixed(2)}</p></div>` : ''}
-          <div class="secao"><label>Data de entrada</label><p>${new Date(os.created_at).toLocaleDateString('pt-BR')}</p></div>
+          ${os.valor ? `<div class="secao"><label>Valor do serviço</label><p style="font-size:18px; font-weight:600; color:#1D9E75;">R$ ${parseFloat(os.valor).toFixed(2)}</p></div>` : ''}
+
           <div class="assinatura">
-            <div><div class="linha">Assinatura do cliente</div></div>
-            <div><div class="linha">Assinatura do técnico</div></div>
+            <div><div class="linha-assinatura">Assinatura do cliente</div></div>
+            <div><div class="linha-assinatura">Assinatura do técnico</div></div>
           </div>
-          <div class="rodape">Documento gerado pelo Supradesk</div>
+
+          <div class="rodape">
+            <span>Gerado pelo Supradesk — sistema de gestão para assistências técnicas</span>
+            <span>${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
         </body>
       </html>
     `)
@@ -243,8 +271,12 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   const relatorioFaturamento = (() => {
     const ini = relInicio ? new Date(relInicio + 'T00:00:00') : null
     const fim = relFim ? new Date(relFim + 'T23:59:59') : null
-    const entreguesComValor = ordens.filter(o => o.status === 'Entregue' && o.valor)
-    const noPeriodo = entreguesComValor.filter(o => {
+    const base = ordens.filter(o => {
+      if (relStatus === '__abertos__') return STATUS_ABERTOS.includes(o.status)
+      if (relStatus) return o.status === relStatus
+      return true
+    }).filter(o => o.valor)
+    const noPeriodo = base.filter(o => {
       const d = new Date(o.created_at)
       if (ini && d < ini) return false
       if (fim && d > fim) return false
@@ -259,7 +291,11 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   // Ranking de equipamentos mais atendidos
   const rankingEquipamentos = (() => {
     const mapa = {}
-    ordens.forEach(o => {
+    ordens.filter(o => {
+      if (relStatus === '__abertos__') return STATUS_ABERTOS.includes(o.status)
+      if (relStatus) return o.status === relStatus
+      return true
+    }).forEach(o => {
       const tipo = o.tipo || 'Outro'
       mapa[tipo] = (mapa[tipo] || 0) + 1
     })
@@ -269,7 +305,11 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   // Top clientes (mais OS no total)
   const topClientes = (() => {
     const mapa = {}
-    ordens.forEach(o => {
+    ordens.filter(o => {
+      if (relStatus === '__abertos__') return STATUS_ABERTOS.includes(o.status)
+      if (relStatus) return o.status === relStatus
+      return true
+    }).forEach(o => {
       const nome = (o.cliente || 'Sem nome').trim()
       if (!mapa[nome]) mapa[nome] = { nome, qtd: 0, receita: 0 }
       mapa[nome].qtd += 1
@@ -295,15 +335,18 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
 
   // Atalhos do painel inicial
   const atalhos = [
-    { id: 'nova', icone: '📝', cor: cores.reparo, label: 'Nova OS', acao: () => abrirNovaOS() },
-    { id: 'ordens', icone: '📂', cor: cores.aguardando, label: 'OS em aberto', acao: () => { setFiltroStatus('__abertos__'); setTela('ordens') } },
-    { id: 'concluidas', icone: '✅', cor: cores.pronto, label: 'OS concluídas', acao: () => { setFiltroStatus('Entregue'); setTela('ordens') } },
-    { id: 'clientes', icone: '👥', cor: '#9BB5D4', label: 'Clientes', acao: () => setTela('clientes') },
-    { id: 'pecas', icone: '🔧', cor: cores.reparo, label: 'Peças', acao: () => setTela('pecas') },
-    { id: 'estoque', icone: '📦', cor: cores.pronto, label: 'Estoque', acao: () => setTela('estoque') },
-    { id: 'relatorios', icone: '📊', cor: cores.aguardando, label: 'Relatórios', acao: () => setTela('relatorios') },
-    { id: 'config', icone: '⚙️', cor: '#9BB5D4', label: 'Configurações', acao: () => setTela('config') },
-    { id: 'entregues', icone: '📦', cor: cores.entregue, label: 'Entregues', acao: () => { setFiltroStatus('Entregue'); setTela('ordens') } },
+    { id: 'nova',      icone: '📝', cor: cores.reparo,   label: 'Nova OS',              acao: () => abrirNovaOS() },
+    { id: 'clientes',  icone: '👥', cor: '#9BB5D4',       label: 'Clientes',             acao: () => setTela('clientes') },
+    { id: 'relatorios',icone: '📊', cor: cores.aguardando,label: 'Relatórios',           acao: () => setTela('relatorios') },
+    { id: 'config',    icone: '⚙️', cor: '#9BB5D4',       label: 'Configurações',        acao: () => setTela('config') },
+    { id: 'recebido',  icone: STATUS['Recebido'].icone,           cor: STATUS['Recebido'].cor,           label: 'Recebido',             acao: () => { setFiltroStatus('Recebido'); setTela('ordens') } },
+    { id: 'orcamento', icone: STATUS['Orçamento'].icone,          cor: STATUS['Orçamento'].cor,          label: 'Orçamento',            acao: () => { setFiltroStatus('Orçamento'); setTela('ordens') } },
+    { id: 'aprovacao', icone: STATUS['Aguardando aprovação'].icone,cor: STATUS['Aguardando aprovação'].cor,label: 'Aguard. aprovação',   acao: () => { setFiltroStatus('Aguardando aprovação'); setTela('ordens') } },
+    { id: 'reparo',    icone: STATUS['Em reparo'].icone,           cor: STATUS['Em reparo'].cor,          label: 'Em reparo',            acao: () => { setFiltroStatus('Em reparo'); setTela('ordens') } },
+    { id: 'pronto',    icone: STATUS['Pronto'].icone,              cor: STATUS['Pronto'].cor,             label: 'Prontas',              acao: () => { setFiltroStatus('Pronto'); setTela('ordens') } },
+    { id: 'entregue',  icone: STATUS['Entregue'].icone,            cor: STATUS['Entregue'].cor,           label: 'Entregues',            acao: () => { setFiltroStatus('Entregue'); setTela('ordens') } },
+    { id: 'nao_aprov', icone: STATUS['Não aprovado'].icone,        cor: STATUS['Não aprovado'].cor,       label: 'Não aprovados',        acao: () => { setFiltroStatus('Não aprovado'); setTela('ordens') } },
+    { id: 'abertos',   icone: '📂', cor: cores.aguardando,         label: 'Todos em aberto',              acao: () => { setFiltroStatus('__abertos__'); setTela('ordens') } },
   ]
 
   const formularioOS = (
@@ -718,6 +761,29 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
               <p style={{ color: t.textoFraco, fontSize: 13, margin: '4px 0 0' }}>Acompanhe os números da sua assistência</p>
             </div>
 
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+              {[
+                { label: 'Todos', filtro: '' },
+                { label: '📥 Recebido', filtro: 'Recebido' },
+                { label: '🧾 Orçamento', filtro: 'Orçamento' },
+                { label: '⏳ Aguardando aprovação', filtro: 'Aguardando aprovação' },
+                { label: '🔧 Em reparo', filtro: 'Em reparo' },
+                { label: '✅ Pronto', filtro: 'Pronto' },
+                { label: '📦 Entregue', filtro: 'Entregue' },
+                { label: '🚫 Não aprovado', filtro: 'Não aprovado' },
+                { label: '📂 Em aberto', filtro: '__abertos__' },
+              ].map(f => {
+                const ativo = relStatus === f.filtro
+                const s = STATUS[f.filtro]
+                const cor = s ? s.cor : t.azul
+                return (
+                  <div key={f.filtro} onClick={() => setRelStatus(f.filtro)} style={{ background: ativo ? cor : t.card, color: ativo ? '#fff' : t.textoSuave, border: `1px solid ${ativo ? cor : t.cardBorda}`, borderRadius: 20, padding: '7px 14px', fontSize: 12, cursor: 'pointer', fontWeight: ativo ? '500' : 'normal' }}>
+                    {f.label}
+                  </div>
+                )
+              })}
+            </div>
+
             <div style={{ background: t.card, border: `1px solid ${t.cardBorda}`, borderRadius: 12, padding: 18, marginBottom: 16 }}>
               <div style={{ color: t.textoSuave, fontSize: 14, fontWeight: '500', marginBottom: 4 }}>Faturamento por período</div>
               <div style={{ color: t.textoFraco, fontSize: 12, marginBottom: 14 }}>Baseado nas OS entregues com valor lançado</div>
@@ -821,13 +887,8 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
           </div>
         )}
 
-        {/* CONFIG (placeholder) */}
-        {tela === 'config' && (
-          <div style={{ color: t.textoFraco, textAlign: 'center', padding: 60 }}>
-            <h1 style={{ color: t.texto, fontSize: 22, fontWeight: '500' }}>Configurações</h1>
-            <p>Em breve: dados da empresa, usuários e personalização.</p>
-          </div>
-        )}
+        {/* CONFIG */}
+        {tela === 'config' && <Configuracoes t={t} modo={modo} />}
 
         </div>
       </div>
