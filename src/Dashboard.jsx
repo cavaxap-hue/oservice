@@ -19,6 +19,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   const [hoverCard, setHoverCard] = useState(null)
   const [menuMobileAberto, setMenuMobileAberto] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [osExpandida, setOsExpandida] = useState(null)
 
   useEffect(() => {
     function handleResize() { setIsMobile(window.innerWidth < 768) }
@@ -594,62 +595,83 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente, modelo ou telefone..." style={inputStyle} />
             </div>
 
-            <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.cardBorda}`, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {ordensFiltradas.length === 0 ? (
-                <div style={{ padding: 48, textAlign: 'center', color: t.textoFraco }}>
+                <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.cardBorda}`, padding: 48, textAlign: 'center', color: t.textoFraco }}>
                   <p style={{ fontSize: 16, marginBottom: 8 }}>{busca ? 'Nenhuma OS encontrada' : 'Nenhuma OS cadastrada ainda'}</p>
                   <p style={{ fontSize: 13 }}>{busca ? 'Tente outro termo' : 'Clique em + Nova OS para começar'}</p>
                 </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: isMobile ? 700 : 'auto' }}>
-                  <thead>
-                    <tr style={{ background: modo === 'dark' ? 'rgba(255,255,255,0.03)' : '#F9FAFB' }}>
-                      {['Nº', 'Cliente', 'Equipamento', 'Problema', 'Valor', 'Tempo', 'Status', 'Ações'].map(h => (
-                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', color: t.textoFraco, fontWeight: '500', fontSize: 12 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ordensFiltradas.map((os) => {
-                      const { cor, bg } = statusInfo(os.status)
-                      return (
-                        <tr key={os.id} style={{ borderTop: `1px solid ${t.cardBorda}` }}>
-                          <td style={{ padding: '14px 16px', color: t.textoFraco, fontFamily: 'monospace', fontSize: 13 }}>#{String(os.numero || 0).padStart(4, '0')}</td>
-                          <td style={{ padding: '14px 16px', color: t.texto, fontWeight: '500' }}>
-                            <div>{os.cliente}</div>
-                            <div style={{ fontSize: 12, color: t.textoFraco }}>{os.telefone}</div>
-                          </td>
-                          <td style={{ padding: '14px 16px', color: t.textoSuave }}>{os.tipo} — {os.modelo}</td>
-                          <td style={{ padding: '14px 16px', color: t.textoSuave, maxWidth: 160 }}>
-                            <div>{os.problema}</div>
-                            {os.observacoes && <div style={{ fontSize: 11, color: t.textoFraco, marginTop: 2 }}>{os.observacoes}</div>}
-                          </td>
-                          <td style={{ padding: '14px 16px', color: t.texto, fontWeight: '500' }}>{os.valor ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}</td>
-                          <td style={{ padding: '14px 16px', color: t.textoFraco, fontSize: 12 }}>{diasAberta(os.created_at)}</td>
-                          <td style={{ padding: '14px 16px' }}>
-                            <span style={{ background: bg, color: cor, padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: '500' }}>{os.status}</span>
-                          </td>
-                          <td style={{ padding: '14px 16px' }}>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              {proximoStatusDe(os.status) && (
-                                <button onClick={() => mudarStatus(os.id, proximoStatusDe(os.status))} style={{ background: 'transparent', color: t.textoSuave, border: `1px solid ${t.borda}`, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>→ {proximoStatusDe(os.status)}</button>
-                              )}
-                              {os.status === 'Aguardando aprovação' && (
-                                <button onClick={() => mudarStatus(os.id, 'Não aprovado')} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Não aprovado</button>
-                              )}
-                              <button onClick={() => abrirEdicao(os)} style={{ background: 'transparent', color: cores.aguardando, border: `1px solid ${cores.aguardando}`, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Editar</button>
-                              <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Imprimir</button>
-                              <button onClick={() => excluirOS(os.id)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Excluir</button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              )}
+              ) : ordensFiltradas.map((os) => {
+                const { cor, bg } = statusInfo(os.status)
+                const expandido = osExpandida === os.id
+                return (
+                  <div key={os.id} style={{ background: t.card, borderRadius: 12, border: `1px solid ${expandido ? cor : t.cardBorda}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                    {/* Cabeçalho do card — sempre visível */}
+                    <div onClick={() => setOsExpandida(expandido ? null : os.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <div style={{ width: 4, height: 36, borderRadius: 2, background: cor }}></div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ color: t.textoFraco, fontFamily: 'monospace', fontSize: 12 }}>#{String(os.numero || 0).padStart(4, '0')}</span>
+                          <span style={{ color: t.texto, fontWeight: '500', fontSize: 14 }}>{os.cliente}</span>
+                          <span style={{ color: t.textoFraco, fontSize: 12 }}>•</span>
+                          <span style={{ color: t.textoSuave, fontSize: 13 }}>{os.tipo} {os.modelo}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                          <span style={{ background: bg, color: cor, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: '500' }}>{STATUS[os.status]?.icone} {os.status}</span>
+                          <span style={{ color: t.textoFraco, fontSize: 11 }}>{diasAberta(os.created_at)}</span>
+                          {os.valor && <span style={{ color: cores.pronto, fontSize: 12, fontWeight: '500' }}>R$ {parseFloat(os.valor).toFixed(2)}</span>}
+                        </div>
+                      </div>
+                      <span style={{ color: t.textoFraco, fontSize: 18, flexShrink: 0, transform: expandido ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>⌄</span>
+                    </div>
+
+                    {/* Detalhes — só quando expandido */}
+                    {expandido && (
+                      <div style={{ borderTop: `1px solid ${t.cardBorda}`, padding: '16px 16px 16px 32px' }}>
+                        {os.problema && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 4 }}>PROBLEMA RELATADO</div>
+                            <div style={{ color: t.textoSuave, fontSize: 14 }}>{os.problema}</div>
+                          </div>
+                        )}
+                        {os.observacoes && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 4 }}>OBSERVAÇÕES TÉCNICAS</div>
+                            <div style={{ color: t.textoSuave, fontSize: 14 }}>{os.observacoes}</div>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 20, marginBottom: 16, flexWrap: 'wrap' }}>
+                          <div>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>TELEFONE</div>
+                            <div style={{ color: t.textoSuave, fontSize: 13 }}>{os.telefone || '—'}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>VALOR</div>
+                            <div style={{ color: os.valor ? cores.pronto : t.textoFraco, fontSize: 13, fontWeight: '500' }}>{os.valor ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>TEMPO ABERTA</div>
+                            <div style={{ color: t.textoSuave, fontSize: 13 }}>{diasAberta(os.created_at)}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {proximoStatusDe(os.status) && (
+                            <button onClick={() => mudarStatus(os.id, proximoStatusDe(os.status))} style={{ background: t.azul, color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: '500' }}>→ {proximoStatusDe(os.status)}</button>
+                          )}
+                          {os.status === 'Aguardando aprovação' && (
+                            <button onClick={() => mudarStatus(os.id, 'Não aprovado')} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>Não aprovado</button>
+                          )}
+                          <button onClick={() => abrirEdicao(os)} style={{ background: 'transparent', color: cores.aguardando, border: `1px solid ${cores.aguardando}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✏️ Editar</button>
+                          <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🖨️ Imprimir</button>
+                          <button onClick={() => excluirOS(os.id)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🗑 Excluir</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </>
         )}
