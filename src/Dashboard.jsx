@@ -98,7 +98,11 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   }
 
   async function mudarStatus(id, novoStatus) {
-    await supabase.from('ordens').update({ status: novoStatus }).eq('id', id)
+    const update = { status: novoStatus }
+    if (novoStatus === 'Entregue' || novoStatus === 'Não aprovado') {
+      update.fechada_em = new Date().toISOString()
+    }
+    await supabase.from('ordens').update(update).eq('id', id)
     carregarOrdens()
   }
 
@@ -193,7 +197,10 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
     const buscaOk = o.cliente.toLowerCase().includes(busca.toLowerCase()) ||
       o.modelo.toLowerCase().includes(busca.toLowerCase()) ||
       o.telefone.includes(busca)
-    const filtroOk = filtroStatus === '' || o.status === filtroStatus
+    let filtroOk
+    if (filtroStatus === '__abertos__') filtroOk = STATUS_ABERTOS.includes(o.status)
+    else if (filtroStatus === '') filtroOk = true
+    else filtroOk = o.status === filtroStatus
     return buscaOk && filtroOk
   })
 
@@ -289,13 +296,14 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   // Atalhos do painel inicial
   const atalhos = [
     { id: 'nova', icone: '📝', cor: cores.reparo, label: 'Nova OS', acao: () => abrirNovaOS() },
-    { id: 'ordens', icone: '📂', cor: cores.aguardando, label: 'OS em aberto', acao: () => { setFiltroStatus(''); setTela('ordens') } },
+    { id: 'ordens', icone: '📂', cor: cores.aguardando, label: 'OS em aberto', acao: () => { setFiltroStatus('__abertos__'); setTela('ordens') } },
     { id: 'concluidas', icone: '✅', cor: cores.pronto, label: 'OS concluídas', acao: () => { setFiltroStatus('Entregue'); setTela('ordens') } },
     { id: 'clientes', icone: '👥', cor: '#9BB5D4', label: 'Clientes', acao: () => setTela('clientes') },
     { id: 'pecas', icone: '🔧', cor: cores.reparo, label: 'Peças', acao: () => setTela('pecas') },
     { id: 'estoque', icone: '📦', cor: cores.pronto, label: 'Estoque', acao: () => setTela('estoque') },
     { id: 'relatorios', icone: '📊', cor: cores.aguardando, label: 'Relatórios', acao: () => setTela('relatorios') },
     { id: 'config', icone: '⚙️', cor: '#9BB5D4', label: 'Configurações', acao: () => setTela('config') },
+    { id: 'entregues', icone: '📦', cor: cores.entregue, label: 'Entregues', acao: () => { setFiltroStatus('Entregue'); setTela('ordens') } },
   ]
 
   const formularioOS = (
@@ -652,9 +660,19 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
                             <div style={{ color: os.valor ? cores.pronto : t.textoFraco, fontSize: 13, fontWeight: '500' }}>{os.valor ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}</div>
                           </div>
                           <div>
+                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>DATA DE ABERTURA</div>
+                            <div style={{ color: t.textoSuave, fontSize: 13 }}>{new Date(os.created_at).toLocaleDateString('pt-BR')}</div>
+                          </div>
+                          <div>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>TEMPO ABERTA</div>
                             <div style={{ color: t.textoSuave, fontSize: 13 }}>{diasAberta(os.created_at)}</div>
                           </div>
+                          {os.fechada_em && (
+                            <div>
+                              <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>DATA DE FECHAMENTO</div>
+                              <div style={{ color: cores.pronto, fontSize: 13, fontWeight: '500' }}>{new Date(os.fechada_em).toLocaleDateString('pt-BR')}</div>
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           {proximoStatusDe(os.status) && (
