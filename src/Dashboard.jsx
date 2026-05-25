@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Clientes from './Clientes'
 import Configuracoes from './Configuracoes'
+import LayoutsClientes from './LayoutsClientes'
 import Logo from './Logo'
 import { cores, STATUS, STATUS_ABERTOS, STATUS_FINAIS, STATUS_INICIAL } from './theme'
 
@@ -407,7 +408,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   // Atalhos do painel inicial
   const atalhos = [
     { id: 'nova',      icone: '📝', cor: cores.reparo,   label: 'Nova OS',              acao: () => abrirNovaOS() },
-    { id: 'anotacoes', icone: '🔐', cor: '#7C5CD6',       label: 'Anotações',            acao: () => setModalAnotacoes(true) },
+    { id: 'layouts',   icone: '📁', cor: '#7C5CD6',       label: 'Layouts Clientes',     acao: () => setTela('layouts') },
     { id: 'clientes',  icone: '👥', cor: '#9BB5D4',       label: 'Clientes',             acao: () => setTela('clientes') },
     { id: 'relatorios',icone: '📊', cor: cores.aguardando,label: 'Relatórios',           acao: () => setTela('relatorios') },
     { id: 'config',    icone: '⚙', cor: '#9BB5D4',       label: 'Configurações',        acao: () => setTela('config') },
@@ -869,6 +870,9 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
 
         {/* CLIENTES */}
         {tela === 'clientes' && <Clientes t={t} modo={modo} />}
+
+        {/* LAYOUTS CLIENTES */}
+        {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} />}
 
         {/* RELATÓRIOS */}
         {tela === 'relatorios' && (
