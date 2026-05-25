@@ -250,7 +250,13 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
           </div>
           <div class="secao"><label>Problema relatado</label><p>${os.problema}</p></div>
           ${os.observacoes ? `<div class="secao"><label>Observações técnicas</label><p>${os.observacoes}</p></div>` : ''}
-          ${os.valor ? `<div class="secao"><label>Valor do serviço</label><p style="font-size:18px; font-weight:600; color:#1D9E75;">R$ ${parseFloat(os.valor).toFixed(2)}</p></div>` : ''}
+          ${(os.hora_inicio || os.hora_fim) ? `<div class="secao"><label>Horário do atendimento</label><p>${os.hora_inicio || '?'} às ${os.hora_fim || '?'}${(os.hora_inicio && os.hora_fim && calcularDuracao(os.hora_inicio, os.hora_fim)) ? ` (${calcularDuracao(os.hora_inicio, os.hora_fim)})` : ''}</p></div>` : ''}
+          ${(os.valor_pecas > 0 || os.valor_servico > 0 || os.valor) ? `
+          <div class="grid">
+            ${(os.valor_pecas > 0) ? `<div class="secao"><label>Valor das peças</label><p>R$ ${parseFloat(os.valor_pecas).toFixed(2)}</p></div>` : ''}
+            ${(os.valor_servico > 0) ? `<div class="secao"><label>Valor do serviço</label><p>R$ ${parseFloat(os.valor_servico).toFixed(2)}</p></div>` : ''}
+          </div>
+          <div class="secao"><label>Valor total</label><p style="font-size:20px; font-weight:700; color:#1D9E75;">R$ ${parseFloat(os.valor || ((os.valor_pecas||0) + (os.valor_servico||0))).toFixed(2)}</p></div>` : ''}
 
           <div class="assinatura">
             <div><div class="linha-assinatura">Assinatura do cliente</div></div>
