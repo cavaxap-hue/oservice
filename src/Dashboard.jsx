@@ -609,6 +609,12 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
       <div style={{ flex: 1, padding: isMobile ? 16 : 28, overflowX: 'hidden' }}>
         <div style={{ maxWidth: 1680, margin: '0 auto' }}>
 
+        {tela !== 'dashboard' && (
+          <button onClick={() => setTela('dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', color: t.azul, border: `1px solid ${t.azul}`, padding: '7px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: '500', marginBottom: 16 }}>
+            🏠 Painel
+          </button>
+        )}
+
         {/* DASHBOARD */}
         {tela === 'dashboard' && (
           <>
