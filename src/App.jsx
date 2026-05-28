@@ -18,6 +18,17 @@ function Login({ t, modo, alternar }) {
     setCarregando(false)
   }
 
+  async function recuperarSenha() {
+    if (!email) { setErro('Digite seu e-mail primeiro.'); return }
+    setCarregando(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    })
+    if (error) error.status === 429 ? setErro('Muitas tentativas. Aguarde 1 minuto.') : setErro('Erro ao enviar e-mail. Verifique o endereço.')
+    else setErro('E-mail de recuperação enviado! Verifique sua caixa de entrada.')
+    setCarregando(false)
+  }
+
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
 
@@ -47,6 +58,12 @@ function Login({ t, modo, alternar }) {
           {carregando ? 'Entrando...' : 'Entrar'}
         </button>
 
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button onClick={recuperarSenha} style={{ background: 'transparent', border: 'none', color: t.textoFraco, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+            Esqueci minha senha
+          </button>
+        </div>
+
       </div>
     </div>
   )
@@ -71,6 +88,10 @@ function App() {
   const [verificando, setVerificando] = useState(true)
   const [empresaId, setEmpresaId] = useState(null)
   const [buscandoEmpresa, setBuscandoEmpresa] = useState(false)
+  const [recuperando, setRecuperando] = useState(false)
+  const [novaSenha, setNovaSenha] = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
+  const [novaSenhaMsg, setNovaSenhaMsg] = useState('')
 
   useEffect(() => {
     document.body.style.background = t.bg
@@ -84,6 +105,12 @@ function App() {
       else setVerificando(false)
     })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') {
+        setRecuperando(true)
+        setSessao(session)
+        setVerificando(false)
+        return
+      }
       setSessao(session)
       if (session) buscarEmpresa(session.user.id)
       else { setEmpresaId(null); setVerificando(false) }
@@ -103,9 +130,52 @@ function App() {
     setVerificando(false)
   }
 
+  async function salvarNovaSenha() {
+    if (!novaSenha || novaSenha.length < 6) { setNovaSenhaMsg('A senha deve ter pelo menos 6 caracteres.'); return }
+    if (novaSenha !== confirmarSenha) { setNovaSenhaMsg('As senhas não coincidem. Verifique e tente novamente.'); return }
+    const { error } = await supabase.auth.updateUser({ password: novaSenha })
+    if (error) {
+      if (error.message.includes('same password') || error.message.includes('different')) 
+        setNovaSenhaMsg('A nova senha não pode ser igual à anterior.')
+      else setNovaSenhaMsg('Erro ao salvar. Tente novamente.')
+    }
+    else {
+      setNovaSenhaMsg('Senha alterada com sucesso!')
+      setRecuperando(false)
+      buscarEmpresa(sessao.user.id)
+    }
+  }
+
   if (verificando || buscandoEmpresa) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', color: t.textoFraco, background: t.bg }}>
       Carregando...
+    </div>
+  )
+
+  if (recuperando) return (
+    <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: t.card, padding: 40, borderRadius: 16, border: `1px solid ${t.cardBorda}`, width: '100%', maxWidth: 400 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <Logo modo={modo} tamanho={0.7} />
+        </div>
+        <h2 style={{ color: t.texto, fontSize: 20, fontWeight: '500', marginBottom: 8, textAlign: 'center' }}>Definir nova senha</h2>
+        <p style={{ color: t.textoFraco, fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Digite sua nova senha para continuar</p>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 13, color: t.textoSuave, display: 'block', marginBottom: 6 }}>Nova senha</label>
+          <input value={novaSenha} onChange={e => setNovaSenha(e.target.value)} type="password" placeholder="Mínimo 6 caracteres" style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: `1px solid ${t.inputBorda}`, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: t.inputBg, color: t.texto }} />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 13, color: t.textoSuave, display: 'block', marginBottom: 6 }}>Confirmar nova senha</label>
+          <input value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} type="password" placeholder="Repita a nova senha" onKeyDown={e => e.key === 'Enter' && salvarNovaSenha()} style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: `1px solid ${confirmarSenha && novaSenha !== confirmarSenha ? '#E24B4A' : t.inputBorda}`, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: t.inputBg, color: t.texto }} />
+          {confirmarSenha && novaSenha !== confirmarSenha && (
+            <p style={{ color: '#E24B4A', fontSize: 12, margin: '4px 0 0' }}>As senhas não coincidem</p>
+          )}
+        </div>
+        {novaSenhaMsg && <p style={{ color: novaSenhaMsg.includes('sucesso') ? '#1D9E75' : '#E24B4A', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{novaSenhaMsg}</p>}
+        <button onClick={salvarNovaSenha} style={{ width: '100%', background: t.azul, color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontSize: 15, cursor: 'pointer', fontWeight: '500' }}>
+          Salvar nova senha
+        </button>
+      </div>
     </div>
   )
 
