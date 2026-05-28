@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
 
-function LayoutsClientes({ t, modo }) {
+function LayoutsClientes({ t, modo, empresaId }) {
   const [clientes, setClientes] = useState([])
   const [pastasLivres, setPastasLivres] = useState([])
   const [pastaAberta, setPastaAberta] = useState(null) // { tipo: 'cliente'|'pasta', id, nome }
@@ -20,8 +20,8 @@ function LayoutsClientes({ t, modo }) {
   }, [])
 
   async function carregarTudo() {
-    const { data: cli } = await supabase.from('clientes').select('id, nome, telefone').order('nome', { ascending: true })
-    const { data: pas } = await supabase.from('pastas').select('*').order('nome', { ascending: true })
+    const { data: cli } = await supabase.from('clientes').select('id, nome, telefone').eq('empresa_id', empresaId).order('nome', { ascending: true })
+    const { data: pas } = await supabase.from('pastas').select('*').eq('empresa_id', empresaId).order('nome', { ascending: true })
     if (cli) setClientes(cli)
     if (pas) setPastasLivres(pas)
   }
@@ -39,7 +39,7 @@ function LayoutsClientes({ t, modo }) {
 
   async function criarPastaLivre() {
     if (!novaPasta.trim()) return
-    await supabase.from('pastas').insert([{ nome: novaPasta.trim() }])
+    await supabase.from('pastas').insert([{ nome: novaPasta.trim(), empresa_id: empresaId }])
     setNovaPasta('')
     setCriandoPasta(false)
     carregarTudo()

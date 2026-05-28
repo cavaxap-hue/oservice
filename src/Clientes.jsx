@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
 
-function Clientes({ t, modo }) {
+function Clientes({ t, modo, empresaId }) {
   const [tela, setTela] = useState('lista')
   const [clientes, setClientes] = useState([])
   const [busca, setBusca] = useState('')
@@ -14,7 +14,7 @@ function Clientes({ t, modo }) {
   }, [])
 
   async function carregarClientes() {
-    const { data } = await supabase.from('clientes').select('*').order('nome', { ascending: true })
+    const { data } = await supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nome', { ascending: true })
     if (data) setClientes(data)
   }
 
@@ -23,7 +23,7 @@ function Clientes({ t, modo }) {
       await supabase.from('clientes').update(form).eq('id', editando.id)
       setEditando(null)
     } else {
-      await supabase.from('clientes').insert([form])
+      await supabase.from('clientes').insert([{ ...form, empresa_id: empresaId }])
     }
     setForm({ nome: '', telefone: '', email: '', cpf: '', endereco: '' })
     setTela('lista')

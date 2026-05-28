@@ -6,7 +6,7 @@ import LayoutsClientes from './LayoutsClientes'
 import Logo from './Logo'
 import { cores, STATUS, STATUS_ABERTOS, STATUS_FINAIS, STATUS_INICIAL } from './theme'
 
-function Dashboard({ onSair, t, modo, alternar, sessao }) {
+function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [tela, setTela] = useState('dashboard')
   const [ordens, setOrdens] = useState([])
   const [busca, setBusca] = useState('')
@@ -41,7 +41,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   }, [])
 
   async function carregarClientes() {
-    const { data } = await supabase.from('clientes').select('*').order('nome', { ascending: true })
+    const { data } = await supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nome', { ascending: true })
     if (data) setListaClientes(data)
   }
 
@@ -94,7 +94,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
 
   async function salvarNovoClienteInline() {
     if (!novoCliente.nome.trim()) { window.alert('Digite ao menos o nome do cliente.'); return }
-    const { data } = await supabase.from('clientes').insert([novoCliente]).select()
+    const { data } = await supabase.from('clientes').insert([{ ...novoCliente, empresa_id: empresaId }]).select()
     await carregarClientes()
     setForm({ ...form, cliente: novoCliente.nome, telefone: novoCliente.telefone || '' })
     setNovoCliente({ nome: '', telefone: '', email: '', cpf: '', endereco: '' })
@@ -110,12 +110,12 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   }
 
   async function carregarOrdens() {
-    const { data } = await supabase.from('ordens').select('*').order('numero', { ascending: false })
+    const { data } = await supabase.from('ordens').select('*').eq('empresa_id', empresaId).order('numero', { ascending: false })
     if (data) setOrdens(data)
   }
 
   async function proximoNumero() {
-    const { data } = await supabase.from('ordens').select('numero').order('numero', { ascending: false }).limit(1)
+    const { data } = await supabase.from('ordens').select('numero').eq('empresa_id', empresaId).order('numero', { ascending: false }).limit(1)
     return data && data.length > 0 ? (data[0].numero || 0) + 1 : 1
   }
 
@@ -127,6 +127,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
     await supabase.from('ordens').insert([{
       ...form,
       status: STATUS_INICIAL,
+      empresa_id: empresaId,
       numero,
       valor_pecas,
       valor_servico,
@@ -194,7 +195,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
   }
 
   async function imprimirOS(os) {
-    const { data: cfg } = await supabase.from('configuracoes').select('*').limit(1).single()
+    const { data: cfg } = await supabase.from('configuracoes').select('*').eq('empresa_id', empresaId).limit(1).single()
     const empresa = cfg || {}
     const janela = window.open('', '_blank')
     janela.document.write(`
@@ -881,10 +882,10 @@ function Dashboard({ onSair, t, modo, alternar, sessao }) {
         )}
 
         {/* CLIENTES */}
-        {tela === 'clientes' && <Clientes t={t} modo={modo} />}
+        {tela === 'clientes' && <Clientes t={t} modo={modo} empresaId={empresaId} />}
 
         {/* LAYOUTS CLIENTES */}
-        {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} />}
+        {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} empresaId={empresaId} />}
 
         {/* RELATÓRIOS */}
         {tela === 'relatorios' && (
