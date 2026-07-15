@@ -9,6 +9,7 @@ function Login({ t, modo, alternar }) {
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
+  const [assinando, setAssinando] = useState(false)
 
   async function entrar() {
     setErro('')
@@ -27,6 +28,28 @@ function Login({ t, modo, alternar }) {
     if (error) error.status === 429 ? setErro('Muitas tentativas. Aguarde 1 minuto.') : setErro('Erro ao enviar e-mail. Verifique o endereço.')
     else setErro('E-mail de recuperação enviado! Verifique sua caixa de entrada.')
     setCarregando(false)
+  }
+
+  async function assinar() {
+    setAssinando(true)
+    setErro('')
+    try {
+      const resp = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email || undefined }),
+      })
+      const data = await resp.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setErro('Não foi possível iniciar a assinatura. Tente novamente.')
+        setAssinando(false)
+      }
+    } catch (e) {
+      setErro('Erro de conexão. Tente novamente.')
+      setAssinando(false)
+    }
   }
 
   return (
@@ -52,7 +75,7 @@ function Login({ t, modo, alternar }) {
           <input value={senha} onChange={e => setSenha(e.target.value)} type="password" placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && entrar()} style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: `1px solid ${t.inputBorda}`, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: t.inputBg, color: t.texto }} />
         </div>
 
-        {erro && <p style={{ color: '#E24B4A', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{erro}</p>}
+        {erro && <p style={{ color: erro.includes('enviado') ? '#1D9E75' : '#E24B4A', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{erro}</p>}
 
         <button onClick={entrar} disabled={carregando} style={{ width: '100%', background: carregando ? t.textoFraco : t.azul, color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontSize: 15, cursor: carregando ? 'not-allowed' : 'pointer', fontWeight: '500' }}>
           {carregando ? 'Entrando...' : 'Entrar'}
@@ -61,6 +84,13 @@ function Login({ t, modo, alternar }) {
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button onClick={recuperarSenha} style={{ background: 'transparent', border: 'none', color: t.textoFraco, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
             Esqueci minha senha
+          </button>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${t.borda}`, marginTop: 24, paddingTop: 24, textAlign: 'center' }}>
+          <p style={{ color: t.textoFraco, fontSize: 13, marginBottom: 12 }}>Ainda não tem uma conta?</p>
+          <button onClick={assinar} disabled={assinando} style={{ width: '100%', background: 'transparent', color: t.azul, border: `1px solid ${t.azul}`, padding: '12px', borderRadius: 8, fontSize: 14, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: '500' }}>
+            {assinando ? 'Abrindo pagamento...' : 'Assinar por R$ 39/mês'}
           </button>
         </div>
 
@@ -135,7 +165,7 @@ function App() {
     if (novaSenha !== confirmarSenha) { setNovaSenhaMsg('As senhas não coincidem. Verifique e tente novamente.'); return }
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
     if (error) {
-      if (error.message.includes('same password') || error.message.includes('different')) 
+      if (error.message.includes('same password') || error.message.includes('different'))
         setNovaSenhaMsg('A nova senha não pode ser igual à anterior.')
       else setNovaSenhaMsg('Erro ao salvar. Tente novamente.')
     }
