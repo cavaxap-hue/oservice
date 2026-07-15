@@ -56,20 +56,21 @@ export default async function handler(req, res) {
       const jaExiste = existentes.users.find(u => u.email === email)
 
       let userId
-      let senhaGerada = null
+      let contaNova = false
 
       if (jaExiste) {
         userId = jaExiste.id
       } else {
-        // 2. Cria o usuario no Supabase Auth
-        senhaGerada = gerarSenhaAleatoria()
+        // 2. Cria o usuario no Supabase Auth com senha temporaria aleatoria
+        const senhaTemporaria = gerarSenhaAleatoria()
         const { data: novoUsuario, error: errUser } = await supabaseAdmin.auth.admin.createUser({
           email,
-          password: senhaGerada,
+          password: senhaTemporaria,
           email_confirm: true,
         })
         if (errUser) throw errUser
         userId = novoUsuario.user.id
+        contaNova = true
       }
 
       // 3. Verifica se ja tem empresa vinculada
@@ -96,10 +97,15 @@ export default async function handler(req, res) {
         if (errVinculo) throw errVinculo
       }
 
-      console.log('Conta provisionada com sucesso para:', email, senhaGerada ? '(nova conta)' : '(conta existente)')
+      console.log('Conta provisionada com sucesso para:', email, contaNova ? '(nova conta)' : '(conta existente)')
 
-      // TODO: enviar email de boas-vindas com a senha gerada (senhaGerada)
-      // Por enquanto o cliente usa "Esqueci minha senha" para definir a propria senha
+      // Envia email para definir senha (apenas para contas novas)
+      if (contaNova) {
+        const { error: errReset } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+          redirectTo: `${process.env.SITE_URL || 'https://supradeskos.vercel.app'}`,
+        })
+        if (errReset) console.error('Erro ao enviar email de boas-vindas:', errReset)
+      }
 
       return res.status(200).json({ received: true })
     } catch (err) {

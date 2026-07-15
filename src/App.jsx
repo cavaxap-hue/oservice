@@ -188,8 +188,8 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
           <Logo modo={modo} tamanho={0.7} />
         </div>
-        <h2 style={{ color: t.texto, fontSize: 20, fontWeight: '500', marginBottom: 8, textAlign: 'center' }}>Definir nova senha</h2>
-        <p style={{ color: t.textoFraco, fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Digite sua nova senha para continuar</p>
+        <h2 style={{ color: t.texto, fontSize: 20, fontWeight: '500', marginBottom: 8, textAlign: 'center' }}>Bem-vindo ao Supradesk!</h2>
+        <p style={{ color: t.textoFraco, fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Defina sua senha de acesso para continuar</p>
         <div style={{ marginBottom: 20 }}>
           <label style={{ fontSize: 13, color: t.textoSuave, display: 'block', marginBottom: 6 }}>Nova senha</label>
           <input value={novaSenha} onChange={e => setNovaSenha(e.target.value)} type="password" placeholder="Mínimo 6 caracteres" style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: `1px solid ${t.inputBorda}`, fontSize: 14, outline: 'none', boxSizing: 'border-box', background: t.inputBg, color: t.texto }} />
@@ -203,7 +203,7 @@ function App() {
         </div>
         {novaSenhaMsg && <p style={{ color: novaSenhaMsg.includes('sucesso') ? '#1D9E75' : '#E24B4A', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{novaSenhaMsg}</p>}
         <button onClick={salvarNovaSenha} style={{ width: '100%', background: t.azul, color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontSize: 15, cursor: 'pointer', fontWeight: '500' }}>
-          Salvar nova senha
+          Criar senha e entrar
         </button>
       </div>
     </div>
