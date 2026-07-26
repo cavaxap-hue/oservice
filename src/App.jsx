@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Dashboard from './Dashboard'
 import Logo from './Logo'
+import Landing from './Landing'
 import { useTema } from './theme'
 
-function Login({ t, modo, alternar }) {
+function Login({ t, modo, alternar, onVoltar }) {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
-  const [assinando, setAssinando] = useState(false)
 
   async function entrar() {
     setErro('')
@@ -30,30 +30,12 @@ function Login({ t, modo, alternar }) {
     setCarregando(false)
   }
 
-  async function assinar() {
-    setAssinando(true)
-    setErro('')
-    try {
-      const resp = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email || undefined }),
-      })
-      const data = await resp.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        setErro('Não foi possível iniciar a assinatura. Tente novamente.')
-        setAssinando(false)
-      }
-    } catch (e) {
-      setErro('Erro de conexão. Tente novamente.')
-      setAssinando(false)
-    }
-  }
-
   return (
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+
+      <button onClick={onVoltar} style={{ position: 'absolute', top: 20, left: 20, display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: t.textoFraco, fontSize: 13, cursor: 'pointer' }}>
+        ← Voltar
+      </button>
 
       <button onClick={alternar} style={{ position: 'absolute', top: 20, right: 20, display: 'flex', alignItems: 'center', gap: 7, background: t.card, border: `1px solid ${t.borda}`, color: t.textoSuave, padding: '8px 13px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
         {modo === 'dark' ? '☀️ Tema claro' : '🌙 Tema escuro'}
@@ -87,13 +69,6 @@ function Login({ t, modo, alternar }) {
           </button>
         </div>
 
-        <div style={{ borderTop: `1px solid ${t.borda}`, marginTop: 24, paddingTop: 24, textAlign: 'center' }}>
-          <p style={{ color: t.textoFraco, fontSize: 13, marginBottom: 12 }}>Ainda não tem uma conta?</p>
-          <button onClick={assinar} disabled={assinando} style={{ width: '100%', background: 'transparent', color: t.azul, border: `1px solid ${t.azul}`, padding: '12px', borderRadius: 8, fontSize: 14, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: '500' }}>
-            {assinando ? 'Abrindo pagamento...' : 'Assinar por R$ 39/mês'}
-          </button>
-        </div>
-
       </div>
     </div>
   )
@@ -122,6 +97,7 @@ function App() {
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [novaSenhaMsg, setNovaSenhaMsg] = useState('')
+  const [mostrarLogin, setMostrarLogin] = useState(false)
 
   useEffect(() => {
     document.body.style.background = t.bg
@@ -209,7 +185,10 @@ function App() {
     </div>
   )
 
-  if (!sessao) return <Login t={t} modo={modo} alternar={alternar} />
+  if (!sessao) {
+    if (mostrarLogin) return <Login t={t} modo={modo} alternar={alternar} onVoltar={() => setMostrarLogin(false)} />
+    return <Landing onEntrar={() => setMostrarLogin(true)} />
+  }
   if (!empresaId) return <SemEmpresa t={t} />
   return <Dashboard onSair={() => supabase.auth.signOut()} t={t} modo={modo} alternar={alternar} sessao={sessao} empresaId={empresaId} />
 }
