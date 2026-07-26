@@ -8,15 +8,15 @@ import { useState, useEffect } from 'react'
 export const temas = {
   dark: {
     nome: 'dark',
-    bg: '#0e1a17',           // fundo geral da página
-    sidebar: '#0a1512',      // fundo da barra lateral
-    card: '#11211c',         // fundo dos cards e tabelas
+    bg: '#12161C',           // fundo geral da página
+    sidebar: '#0E1218',      // fundo da barra lateral
+    card: '#1B212A',         // fundo dos cards e tabelas
     cardBorda: 'rgba(255,255,255,0.06)',
     borda: 'rgba(255,255,255,0.10)',
     texto: '#ffffff',        // texto principal
-    textoSuave: '#cdd6d3',   // texto secundário
-    textoFraco: '#7e8e89',   // labels, placeholders
-    azul: '#378ADD',         // cor de destaque (botões, ativo)
+    textoSuave: '#B7BFCA',   // texto secundário
+    textoFraco: '#7B8492',   // labels, placeholders
+    azul: '#F2A93B',         // cor de destaque (botões, ativo)
     azulEscuro: '#185FA5',
     inputBg: '#0e1a17',
     inputBorda: 'rgba(255,255,255,0.12)',
@@ -33,12 +33,12 @@ export const temas = {
     texto: '#1a1a1a',
     textoSuave: '#444',
     textoFraco: '#999',
-    azul: '#185FA5',
-    azulEscuro: '#0C447C',
+    azul: '#C9861F',
+    azulEscuro: '#A66D12',
     inputBg: '#ffffff',
     inputBorda: '#DDD',
     hoverMenu: '#F4F6F9',
-    ativoMenu: '#EEF4FB',
+    ativoMenu: '#FBF3E3',
   }
 }
 
