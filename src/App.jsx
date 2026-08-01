@@ -98,6 +98,7 @@ function App() {
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [novaSenhaMsg, setNovaSenhaMsg] = useState('')
   const [mostrarLogin, setMostrarLogin] = useState(false)
+  const veioDeRecovery = typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
 
   useEffect(() => {
     document.body.style.background = t.bg
@@ -111,7 +112,7 @@ function App() {
       else setVerificando(false)
     })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (_event === 'PASSWORD_RECOVERY') {
+      if (_event === 'PASSWORD_RECOVERY' || (session && veioDeRecovery)) {
         setRecuperando(true)
         setSessao(session)
         setVerificando(false)
