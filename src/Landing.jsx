@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 
 const cores = {
   bg: '#12161C',
-  bgGradiente: 'radial-gradient(ellipse 900px 500px at 15% -10%, rgba(242,169,59,0.10), transparent), radial-gradient(ellipse 700px 500px at 100% 10%, rgba(53,201,174,0.08), transparent)',
+  bgGradiente: 'radial-gradient(ellipse 900px 500px at 15% -10%, rgba(46,143,224,0.14), transparent), radial-gradient(ellipse 700px 500px at 100% 10%, rgba(53,201,174,0.08), transparent)',
   superficie: '#1B212A',
   superficieAlta: '#232B36',
   borda: 'rgba(255,255,255,0.08)',
@@ -10,14 +10,15 @@ const cores = {
   texto: '#EDEFF3',
   textoSuave: '#B7BFCA',
   textoFraco: '#7B8492',
-  ambar: '#F2A93B',
-  ambarForte: '#FFC266',
+  azulEscuro: '#1C74D1',   // início do gradiente dos botões (garante contraste com texto branco)
+  azul: '#2E8FE0',         // destaque principal
+  azulClaro: '#5CB0FF',    // realce de textos sobre o fundo escuro
   teal: '#35C9AE',
 }
 
 const ETAPAS = [
   { n: '01', label: 'Recebido', cor: '#7B8492' },
-  { n: '02', label: 'Orçamento', cor: '#F2A93B' },
+  { n: '02', label: 'Orçamento', cor: '#9B82EA' },
   { n: '03', label: 'Aguardando aprovação', cor: '#E8C468' },
   { n: '04', label: 'Em reparo', cor: '#4E9EE0' },
   { n: '05', label: 'Pronto', cor: '#35C9AE' },
@@ -56,7 +57,7 @@ function TicketOS() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: '0.12em', color: cores.textoFraco }}>ORDEM DE SERVIÇO</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: cores.ambarForte, fontWeight: 600 }}>Nº 0184</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: cores.azulClaro, fontWeight: 600 }}>Nº 0184</span>
       </div>
 
       <div style={{ marginBottom: 20 }}>
@@ -106,13 +107,15 @@ function Landing({ onEntrar }) {
     }
   }
 
+  const gradienteBotao = `linear-gradient(135deg, ${cores.azulEscuro}, ${cores.azul})`
+
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", minHeight: '100vh', background: cores.bg, backgroundImage: cores.bgGradiente, color: cores.texto, overflowX: 'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
         @keyframes supra-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .supra-cta { transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; }
-        .supra-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(242,169,59,0.35); }
+        .supra-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(59,158,255,0.38); }
         .supra-cta-outline:hover { background: rgba(255,255,255,0.06) !important; }
         .supra-card { transition: transform 0.2s ease, border-color 0.2s ease; }
         .supra-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
@@ -123,7 +126,7 @@ function Landing({ onEntrar }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '22px 32px', maxWidth: 1140, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg, ${cores.ambar}, ${cores.ambarForte})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: '#1B1305', fontSize: 15 }}>S</div>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: gradienteBotao, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: '#ffffff', fontSize: 15 }}>S</div>
           <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 18 }}>Supradesk</span>
         </div>
         <button onClick={onEntrar} className="supra-cta-outline" style={{ background: 'transparent', border: `1px solid ${cores.bordaForte}`, color: cores.textoSuave, padding: '9px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
@@ -133,19 +136,19 @@ function Landing({ onEntrar }) {
 
       <div style={{ maxWidth: 1140, margin: '0 auto', padding: '56px 32px 90px', display: 'flex', gap: 56, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 440px', opacity: visivel ? 1 : 0, transform: visivel ? 'none' : 'translateY(18px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(242,169,59,0.1)', border: '1px solid rgba(242,169,59,0.25)', borderRadius: 20, padding: '6px 14px', marginBottom: 22 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(59,158,255,0.10)', border: '1px solid rgba(59,158,255,0.28)', borderRadius: 20, padding: '6px 14px', marginBottom: 22 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: cores.teal }} />
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: cores.ambarForte, letterSpacing: '0.04em' }}>Feito para assistências técnicas</span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: cores.azulClaro, letterSpacing: '0.04em' }}>Feito para assistências técnicas</span>
           </div>
           <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 44, fontWeight: 600, lineHeight: 1.15, margin: '0 0 20px', letterSpacing: '-0.01em' }}>
-            Cada aparelho tem uma etiqueta.<br />Agora ela é <span style={{ color: cores.ambarForte }}>digital</span>.
+            Cada aparelho tem uma etiqueta.<br />Agora ela é <span style={{ color: cores.azulClaro }}>digital</span>.
           </h1>
           <p style={{ color: cores.textoSuave, fontSize: 17, lineHeight: 1.65, marginBottom: 32, maxWidth: 480 }}>
             O Supradesk organiza ordens de serviço, clientes, senhas de acesso e faturamento da sua assistência técnica — automatizado, na nuvem, sem planilha e sem papel perdido no balcão.
           </p>
           {erro && <p style={{ color: '#E8687A', fontSize: 13, marginBottom: 16 }}>{erro}</p>}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ background: `linear-gradient(135deg, ${cores.ambar}, ${cores.ambarForte})`, color: '#1B1305', border: 'none', padding: '15px 30px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+            <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '15px 30px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
               {assinando ? 'Abrindo pagamento...' : 'Assinar por R$ 39/mês'}
             </button>
             <span style={{ color: cores.textoFraco, fontSize: 13 }}>Cancele quando quiser · sem taxa de adesão</span>
@@ -198,11 +201,11 @@ function Landing({ onEntrar }) {
           <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: '0.1em', color: cores.textoFraco, marginBottom: 14, textTransform: 'uppercase' }}>Plano único</p>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, color: cores.textoSuave }}>R$</span>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 52, fontWeight: 700, color: cores.ambarForte }}>39</span>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 52, fontWeight: 700, color: cores.azulClaro }}>39</span>
             <span style={{ color: cores.textoFraco, fontSize: 14 }}>/mês</span>
           </div>
           <p style={{ color: cores.textoFraco, fontSize: 13, marginBottom: 26 }}>Todos os recursos incluídos. Sem letra miúda.</p>
-          <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ width: '100%', background: `linear-gradient(135deg, ${cores.ambar}, ${cores.ambarForte})`, color: '#1B1305', border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+          <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ width: '100%', background: gradienteBotao, color: '#ffffff', border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
             {assinando ? 'Abrindo pagamento...' : 'Começar agora'}
           </button>
         </div>
