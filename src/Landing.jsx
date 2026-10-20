@@ -119,19 +119,27 @@ function Landing({ onEntrar }) {
         .supra-cta-outline:hover { background: rgba(255,255,255,0.06) !important; }
         .supra-card { transition: transform 0.2s ease, border-color 0.2s ease; }
         .supra-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
+        @media (max-width: 480px) {
+          .supra-topo-btn { padding: 8px 12px !important; font-size: 13px !important; }
+        }
         @media (prefers-reduced-motion: reduce) {
           .supra-cta, .supra-cta:hover, .supra-card, .supra-card:hover { transition: none !important; transform: none !important; }
         }
       `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '22px 32px', maxWidth: 1140, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14, padding: '22px 32px', maxWidth: 1140, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 9, background: gradienteBotao, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: '#ffffff', fontSize: 15 }}>S</div>
           <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 18 }}>Supradesk</span>
         </div>
-        <button onClick={onEntrar} className="supra-cta-outline" style={{ background: 'transparent', border: `1px solid ${cores.bordaForte}`, color: cores.textoSuave, padding: '9px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-          Entrar
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={onEntrar} className="supra-cta-outline supra-topo-btn" style={{ background: 'transparent', border: `1px solid ${cores.bordaForte}`, color: cores.textoSuave, padding: '9px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>
+            Já sou cliente
+          </button>
+          <button onClick={assinar} disabled={assinando} className="supra-cta supra-topo-btn" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>
+            {assinando ? 'Abrindo...' : 'Assinar agora'}
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth: 1140, margin: '0 auto', padding: '56px 32px 90px', display: 'flex', gap: 56, alignItems: 'center', flexWrap: 'wrap' }}>
