@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import Clientes from './Clientes'
 import Configuracoes from './Configuracoes'
 import LayoutsClientes from './LayoutsClientes'
+import Preventivas from './Preventivas'
 import Logo from './Logo'
 import { cores, STATUS, STATUS_ABERTOS, STATUS_FINAIS, STATUS_INICIAL } from './theme'
 
@@ -416,6 +417,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const atalhos = [
     { id: 'nova',      icone: '📝', cor: cores.reparo,   label: 'Nova OS',              acao: () => abrirNovaOS() },
     { id: 'layouts',   icone: '📁', cor: '#7C5CD6',       label: 'Layouts Clientes',     acao: () => setTela('layouts') },
+    { id: 'preventivas', icone: '🛡️', cor: cores.pronto,   label: 'Preventivas',          acao: () => setTela('preventivas') },
     { id: 'clientes',  icone: '👥', cor: '#9BB5D4',       label: 'Clientes',             acao: () => setTela('clientes') },
     { id: 'relatorios',icone: '📊', cor: cores.aguardando,label: 'Relatórios',           acao: () => setTela('relatorios') },
     { id: 'config',    icone: '⚙', cor: '#9BB5D4',       label: 'Configurações',        acao: () => setTela('config') },
@@ -886,6 +888,9 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
 
         {/* LAYOUTS CLIENTES */}
         {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} empresaId={empresaId} />}
+
+        {/* PREVENTIVAS */}
+        {tela === 'preventivas' &&<Preventivas t={t} modo={modo} sessao={sessao} />}
 
         {/* RELATÓRIOS */}
         {tela === 'relatorios' && (
