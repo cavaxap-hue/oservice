@@ -34,8 +34,7 @@ function diasAte(iso) {
   return Math.round((new Date(a, m - 1, d) - new Date(ha, hm - 1, hd)) / (1000 * 60 * 60 * 24))
 }
 
-function Preventivas({ t, modo, sessao }) {
-  const [empresaId, setEmpresaId] = useState(null)
+function Preventivas({ t, modo, empresaId }) {
   const [erro, setErro] = useState('')
   const [clientes, setClientes] = useState([])
   const [busca, setBusca] = useState('')
@@ -62,26 +61,19 @@ function Preventivas({ t, modo, sessao }) {
   }, [])
 
   useEffect(() => {
-    carregarEmpresa()
+    carregarClientes()
+    carregarAlertas()
   }, [])
 
   // ===== CARREGAMENTO =====
-  async function carregarEmpresa() {
-    const { data, error } = await supabase.from('usuario_empresa').select('empresa_id').eq('user_id', sessao.user.id).limit(1).single()
-    if (error || !data) { setErro('Não foi possível identificar a empresa do usuário.'); return }
-    setEmpresaId(data.empresa_id)
-    carregarClientes(data.empresa_id)
-    carregarAlertas(data.empresa_id)
-  }
-
-  async function carregarClientes(emp) {
-    const { data, error } = await supabase.from('clientes').select('id, nome, telefone').eq('empresa_id', emp).order('nome', { ascending: true })
+  async function carregarClientes() {
+    const { data, error } = await supabase.from('clientes').select('id, nome, telefone').eq('empresa_id', empresaId).order('nome', { ascending: true })
     if (error) { setErro('Erro ao carregar clientes: ' + error.message); return }
     if (data) setClientes(data)
   }
 
-  async function carregarAlertas(emp = empresaId) {
-    const { data } = await supabase.from('equipamentos_cliente').select('id, cliente_id, identificacao, tipo, proxima_preventiva').eq('empresa_id', emp).not('proxima_preventiva', 'is', null).order('proxima_preventiva', { ascending: true })
+  async function carregarAlertas() {
+    const { data } = await supabase.from('equipamentos_cliente').select('id, cliente_id, identificacao, tipo, proxima_preventiva').eq('empresa_id', empresaId).not('proxima_preventiva', 'is', null).order('proxima_preventiva', { ascending: true })
     setAlertas(data || [])
   }
 

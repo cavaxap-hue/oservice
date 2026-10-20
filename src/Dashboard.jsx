@@ -890,7 +890,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} empresaId={empresaId} />}
 
         {/* PREVENTIVAS */}
-        {tela === 'preventivas' &&<Preventivas t={t} modo={modo} sessao={sessao} />}
+        {tela === 'preventivas' && <Preventivas t={t} modo={modo} empresaId={empresaId} />}
 
         {/* RELATÓRIOS */}
         {tela === 'relatorios' && (
