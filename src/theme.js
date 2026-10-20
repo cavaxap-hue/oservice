@@ -16,7 +16,7 @@ export const temas = {
     texto: '#ffffff',        // texto principal
     textoSuave: '#B7BFCA',   // texto secundário
     textoFraco: '#7B8492',   // labels, placeholders
-    azul: '#F2A93B',         // cor de destaque (botões, ativo)
+    azul: '#378ADD',         // cor de destaque (botões, ativo)
     azulEscuro: '#185FA5',
     inputBg: '#0e1a17',
     inputBorda: 'rgba(255,255,255,0.12)',
@@ -33,12 +33,12 @@ export const temas = {
     texto: '#1a1a1a',
     textoSuave: '#444',
     textoFraco: '#999',
-    azul: '#C9861F',
-    azulEscuro: '#A66D12',
+    azul: '#185FA5',
+    azulEscuro: '#0C447C',
     inputBg: '#ffffff',
     inputBorda: '#DDD',
     hoverMenu: '#F4F6F9',
-    ativoMenu: '#FBF3E3',
+    ativoMenu: '#EEF4FB',
   }
 }
 
