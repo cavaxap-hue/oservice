@@ -34,6 +34,163 @@ function diasAte(iso) {
   return Math.round((new Date(a, m - 1, d) - new Date(ha, hm - 1, hd)) / (1000 * 60 * 60 * 24))
 }
 
+// Carrega a logo (qualquer formato que o navegador abra) e converte para PNG via canvas,
+// já que o jsPDF não aceita SVG/GIF direto. Se falhar (CORS, URL quebrada), segue sem logo.
+async function carregarLogo(url) {
+  try {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    await new Promise((ok, falha) => { img.onload = ok; img.onerror = falha; img.src = url })
+    if (!img.naturalWidth || !img.naturalHeight) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    return { dataUrl: canvas.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight }
+  } catch {
+    return null
+  }
+}
+
+function nomeArquivo(texto) {
+  return (texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+}
+
+// Relatório de uma preventiva em PDF (download direto). Visual segue o PDF da OS
+// (imprimirOS no Dashboard): cabeçalho com logo + dados da empresa, linha azul, rótulos
+// pequenos em caixa alta e rodapé discreto.
+async function gerarRelatorioPdf({ empresa, cliente, eq, p }) {
+  const { jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const AZUL = '#185FA5'
+  const M = 18
+  const larguraPag = doc.internal.pageSize.getWidth()
+  const alturaPag = doc.internal.pageSize.getHeight()
+  const largura = larguraPag - M * 2
+  const limiteY = alturaPag - 22 // espaço reservado para o rodapé
+  let y = M
+
+  function garantirEspaco(altura) {
+    if (y + altura > limiteY) { doc.addPage(); y = M }
+  }
+
+  // Rótulo pequeno em caixa alta + valor (com quebra de linha automática)
+  function campo(rotulo, valor, x, w) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor('#999999')
+    doc.text(rotulo.toUpperCase(), x, y)
+    doc.setFontSize(10.5)
+    doc.setTextColor('#333333')
+    const linhas = doc.splitTextToSize(valor || '—', w)
+    doc.text(linhas, x, y + 5)
+    return 5 + linhas.length * 4.6
+  }
+
+  function linhaDupla(a, b) {
+    const meia = (largura - 8) / 2
+    garantirEspaco(14)
+    const h = Math.max(campo(a[0], a[1], M, meia), campo(b[0], b[1], M + meia + 8, meia))
+    y += h + 4
+  }
+
+  // ===== CABEÇALHO =====
+  const logo = empresa.logo_url ? await carregarLogo(empresa.logo_url) : null
+  if (logo) {
+    // Mesmo limite da OS (160x70 px), em mm
+    const escala = Math.min(42 / logo.w, 18 / logo.h)
+    const lw = logo.w * escala
+    const lh = logo.h * escala
+    doc.addImage(logo.dataUrl, 'PNG', M, y, lw, lh)
+    y += lh + 4
+  }
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.setTextColor(AZUL)
+  doc.text(empresa.nome_empresa || 'Supradesk', M, y + 4)
+  y += 9
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor('#666666')
+  if (empresa.cnpj) { doc.text(`CNPJ: ${empresa.cnpj}`, M, y); y += 4.5 }
+  if (empresa.telefone) { doc.text(`Tel: ${empresa.telefone}`, M, y); y += 4.5 }
+  y += 2
+  doc.setDrawColor(AZUL)
+  doc.setLineWidth(0.6)
+  doc.line(M, y, larguraPag - M, y)
+  y += 11
+
+  // ===== TÍTULO =====
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(16)
+  doc.setTextColor('#333333')
+  doc.text('Relatório de Manutenção Preventiva', M, y)
+  y += 11
+
+  // ===== DADOS =====
+  linhaDupla(['Cliente', cliente.nome], ['Telefone', cliente.telefone])
+  linhaDupla(['Equipamento', eq.identificacao], ['Tipo', eq.tipo])
+  linhaDupla(['Marca', eq.marca], ['Modelo', eq.modelo])
+  linhaDupla(['Número de série', eq.numero_serie], ['Data da preventiva', formatarData(p.data_executada)])
+
+  // "O que foi feito" pode ser longo: escreve linha a linha, quebrando página se precisar
+  garantirEspaco(14)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor('#999999')
+  doc.text('O QUE FOI FEITO', M, y)
+  y += 5
+  doc.setFontSize(10.5)
+  doc.setTextColor('#333333')
+  doc.splitTextToSize(p.o_que_foi_feito || '—', largura).forEach(linha => {
+    garantirEspaco(4.6)
+    doc.text(linha, M, y)
+    y += 4.6
+  })
+  y += 4
+
+  if (p.tecnico) {
+    garantirEspaco(14)
+    y += campo('Técnico', p.tecnico, M, largura) + 4
+  }
+
+  // ===== PRÓXIMA PREVENTIVA (destaque, estilo comprovante) =====
+  if (p.proxima_prevista) {
+    const alturaBox = 24
+    garantirEspaco(alturaBox + 4)
+    y += 2
+    doc.setFillColor('#EEF4FB')
+    doc.setDrawColor(AZUL)
+    doc.setLineWidth(0.5)
+    doc.roundedRect(M, y, largura, alturaBox, 2, 2, 'FD')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(AZUL)
+    doc.text('PRÓXIMA PREVENTIVA', larguraPag / 2, y + 8, { align: 'center' })
+    doc.setFontSize(22)
+    doc.text(formatarData(p.proxima_prevista), larguraPag / 2, y + 18, { align: 'center' })
+    y += alturaBox + 4
+  }
+
+  // ===== RODAPÉ (em todas as páginas) =====
+  const agora = new Date()
+  const geradoEm = `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  const totalPaginas = doc.getNumberOfPages()
+  for (let i = 1; i <= totalPaginas; i++) {
+    doc.setPage(i)
+    doc.setDrawColor('#E0E0E0')
+    doc.setLineWidth(0.3)
+    doc.line(M, alturaPag - 16, larguraPag - M, alturaPag - 16)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor('#AAAAAA')
+    doc.text('Documento gerado por Supradesk', M, alturaPag - 11)
+    doc.text(geradoEm, larguraPag - M, alturaPag - 11, { align: 'right' })
+  }
+
+  doc.save(`relatorio-preventiva-${nomeArquivo(eq.identificacao) || 'equipamento'}-${p.data_executada || ''}.pdf`)
+}
+
 function Preventivas({ t, modo, empresaId }) {
   const [erro, setErro] = useState('')
   const [clientes, setClientes] = useState([])
@@ -50,6 +207,7 @@ function Preventivas({ t, modo, empresaId }) {
   const [editandoPrev, setEditandoPrev] = useState(null) // id da preventiva em edição no histórico
   const [formEditPrev, setFormEditPrev] = useState({ ...PREV_VAZIA, atualizarEquip: false })
   const [salvando, setSalvando] = useState(false)
+  const [gerandoPdf, setGerandoPdf] = useState(null) // id da preventiva cujo relatório está sendo gerado
   const [alertas, setAlertas] = useState([]) // equipamentos da empresa com proxima_preventiva definida
   const [alertaExpandido, setAlertaExpandido] = useState(null) // cliente_id expandido no painel
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900)
@@ -235,6 +393,19 @@ function Preventivas({ t, modo, empresaId }) {
     if (error) { window.alert('Erro ao excluir preventiva: ' + error.message); return }
     if (editandoPrev === p.id) setEditandoPrev(null)
     recarregar()
+  }
+
+  // ===== RELATÓRIO PDF =====
+  // Dados da empresa lidos da tabela configuracoes, igual ao imprimirOS do Dashboard
+  async function gerarRelatorio(eq, p) {
+    setGerandoPdf(p.id)
+    try {
+      const { data: cfg } = await supabase.from('configuracoes').select('*').eq('empresa_id', empresaId).limit(1).single()
+      await gerarRelatorioPdf({ empresa: cfg || {}, cliente: clienteAberto, eq, p })
+    } catch (e) {
+      window.alert('Erro ao gerar relatório: ' + e.message)
+    }
+    setGerandoPdf(null)
   }
 
   // ===== STATUS / ALERTAS =====
@@ -432,13 +603,14 @@ function Preventivas({ t, modo, empresaId }) {
   }
 
   // Um item do histórico (visualização)
-  function itemHistorico(p) {
+  function itemHistorico(eq, p) {
     return (
       <div style={{ borderTop: `1px solid ${t.cardBorda}`, padding: '10px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: t.texto, fontSize: 13, fontWeight: '500' }}>✅ {formatarData(p.data_executada)}</span>
           {p.tecnico && <span style={{ color: t.textoFraco, fontSize: 12 }}>🔧 {p.tecnico}</span>}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button onClick={() => gerarRelatorio(eq, p)} disabled={gerandoPdf === p.id} title="Baixar relatório em PDF" style={{ ...btnSecundario, padding: '3px 8px', borderRadius: 6, fontSize: 11, cursor: gerandoPdf === p.id ? 'wait' : 'pointer' }}>{gerandoPdf === p.id ? 'Gerando...' : '📄 Gerar relatório'}</button>
             <button onClick={() => abrirEdicaoPrev(p)} title="Editar preventiva" style={{ ...btnSecundario, padding: '3px 8px', borderRadius: 6, fontSize: 11 }}>✏️ Editar</button>
             <button onClick={() => excluirPreventiva(p)} title="Excluir preventiva" style={{ ...btnPerigo, padding: '3px 8px', borderRadius: 6, fontSize: 11 }}>🗑 Excluir</button>
           </span>
@@ -457,7 +629,7 @@ function Preventivas({ t, modo, empresaId }) {
         {hist.length === 0 && <div style={{ color: t.textoFraco, fontSize: 12 }}>Nenhuma preventiva registrada.</div>}
         {hist.map((p, i) => (
           <div key={p.id}>
-            {editandoPrev === p.id ? edicaoPreventiva(eq, i === 0) : itemHistorico(p)}
+            {editandoPrev === p.id ? edicaoPreventiva(eq, i === 0) : itemHistorico(eq, p)}
           </div>
         ))}
       </div>
