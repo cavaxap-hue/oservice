@@ -2,19 +2,22 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
 
-function Configuracoes({ t, modo }) {
-  const [config, setConfig] = useState({
-    nome_empresa: '',
-    cnpj: '',
-    telefone: '',
-    email: '',
-    endereco: '',
-    cidade: '',
-    bairro: '',
-    cep: '',
-    site: '',
-    logo_url: '',
-  })
+const CONFIG_VAZIA = {
+  nome_empresa: '',
+  cnpj: '',
+  telefone: '',
+  email: '',
+  endereco: '',
+  cidade: '',
+  bairro: '',
+  cep: '',
+  site: '',
+  logo_url: '',
+}
+
+function Configuracoes({ t, modo, empresaId }) {
+  const [config, setConfig] = useState(CONFIG_VAZIA)
+  const [configId, setConfigId] = useState(null) // id da linha da empresa em configuracoes (null = ainda não existe)
   const [salvando, setSalvando] = useState(false)
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
@@ -25,15 +28,30 @@ function Configuracoes({ t, modo }) {
   }, [])
 
   async function carregarConfig() {
-    const { data } = await supabase.from('configuracoes').select('*').limit(1).single()
-    if (data) setConfig(data)
+    // Só a config da empresa logada; se ainda não existir, o formulário abre vazio
+    const { data } = await supabase.from('configuracoes').select('*').eq('empresa_id', empresaId).limit(1).maybeSingle()
+    if (data) {
+      setConfigId(data.id)
+      const campos = {}
+      Object.keys(CONFIG_VAZIA).forEach(k => { campos[k] = data[k] || '' })
+      setConfig(campos)
+    }
     setCarregando(false)
   }
 
+  // Upsert por empresa: atualiza a linha da empresa se já existe, senão cria
   async function salvarConfig() {
     setSalvando(true)
     setMensagem(null)
-    const { data, error } = await supabase.from('configuracoes').upsert({ ...config, id: 1 })
+    const dados = { ...config, empresa_id: empresaId }
+    let error
+    if (configId) {
+      ({ error } = await supabase.from('configuracoes').update(dados).eq('id', configId).eq('empresa_id', empresaId))
+    } else {
+      const res = await supabase.from('configuracoes').insert([dados]).select('id').single()
+      error = res.error
+      if (res.data) setConfigId(res.data.id)
+    }
     if (error) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao salvar. Tente novamente.' })
     } else {
@@ -53,7 +71,7 @@ function Configuracoes({ t, modo }) {
     setUploadando(true)
     setMensagem(null)
     const ext = file.name.split('.').pop()
-    const nome = `logo_empresa_1.${ext}`
+    const nome = `logo_empresa_${empresaId}.${ext}`
     const { error } = await supabase.storage.from('logos').upload(nome, file, { upsert: true })
     if (error) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao fazer upload. Tente novamente.' })

@@ -1027,7 +1027,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         )}
 
         {/* CONFIG */}
-        {tela === 'config' && <Configuracoes t={t} modo={modo} />}
+        {tela === 'config' && <Configuracoes t={t} modo={modo} empresaId={empresaId} />}
 
         </div>
       </div>
