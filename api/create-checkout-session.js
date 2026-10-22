@@ -8,7 +8,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email } = req.body
+    const { email, empresa_id } = req.body
+
+    if (!email || !empresa_id) {
+      return res.status(400).json({ error: 'email e empresa_id sao obrigatorios' })
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -19,7 +23,13 @@ export default async function handler(req, res) {
           quantity: 1,
         },
       ],
-      customer_email: email || undefined,
+      customer_email: email,
+      client_reference_id: String(empresa_id),
+      metadata: { empresa_id: String(empresa_id) },
+      subscription_data: {
+        trial_period_days: 7,
+        metadata: { empresa_id: String(empresa_id) },
+      },
       success_url: `${req.headers.origin}/?assinatura=sucesso&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.origin}/?assinatura=cancelado`,
     })

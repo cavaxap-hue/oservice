@@ -1,20 +1,5 @@
 import { useState, useEffect } from 'react'
-
-const cores = {
-  bg: '#12161C',
-  bgGradiente: 'radial-gradient(ellipse 900px 500px at 15% -10%, rgba(46,143,224,0.14), transparent), radial-gradient(ellipse 700px 500px at 100% 10%, rgba(53,201,174,0.08), transparent)',
-  superficie: '#1B212A',
-  superficieAlta: '#232B36',
-  borda: 'rgba(255,255,255,0.08)',
-  bordaForte: 'rgba(255,255,255,0.14)',
-  texto: '#EDEFF3',
-  textoSuave: '#B7BFCA',
-  textoFraco: '#7B8492',
-  azulEscuro: '#1C74D1',   // início do gradiente dos botões (garante contraste com texto branco)
-  azul: '#2E8FE0',         // destaque principal
-  azulClaro: '#5CB0FF',    // realce de textos sobre o fundo escuro
-  teal: '#35C9AE',
-}
+import { cores } from './cores'
 
 const ETAPAS = [
   { n: '01', label: 'Recebido', cor: '#7B8492' },
@@ -84,28 +69,8 @@ function TicketOS() {
   )
 }
 
-function Landing({ onEntrar }) {
-  const [assinando, setAssinando] = useState(false)
-  const [erro, setErro] = useState('')
+function Landing({ onEntrar, onAssinar }) {
   const visivel = useEntrada()
-
-  async function assinar() {
-    setAssinando(true)
-    setErro('')
-    try {
-      const resp = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await resp.json()
-      if (data.url) window.location.href = data.url
-      else { setErro('Não foi possível iniciar a assinatura.'); setAssinando(false) }
-    } catch (e) {
-      setErro('Erro de conexão. Tente novamente.')
-      setAssinando(false)
-    }
-  }
 
   const gradienteBotao = `linear-gradient(135deg, ${cores.azulEscuro}, ${cores.azul})`
 
@@ -136,8 +101,8 @@ function Landing({ onEntrar }) {
           <button onClick={onEntrar} className="supra-cta-outline supra-topo-btn" style={{ background: 'transparent', border: `1px solid ${cores.bordaForte}`, color: cores.textoSuave, padding: '9px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>
             Já sou cliente
           </button>
-          <button onClick={assinar} disabled={assinando} className="supra-cta supra-topo-btn" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>
-            {assinando ? 'Abrindo...' : 'Assinar agora'}
+          <button onClick={onAssinar} className="supra-cta supra-topo-btn" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>
+            Experimentar grátis
           </button>
         </div>
       </div>
@@ -154,10 +119,9 @@ function Landing({ onEntrar }) {
           <p style={{ color: cores.textoSuave, fontSize: 17, lineHeight: 1.65, marginBottom: 32, maxWidth: 480 }}>
             O Supradesk organiza ordens de serviço, clientes, senhas de acesso e faturamento da sua assistência técnica — automatizado, na nuvem, sem planilha e sem papel perdido no balcão.
           </p>
-          {erro && <p style={{ color: '#E8687A', fontSize: 13, marginBottom: 16 }}>{erro}</p>}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '15px 30px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
-              {assinando ? 'Abrindo pagamento...' : 'Assinar por R$ 39/mês'}
+            <button onClick={onAssinar} className="supra-cta" style={{ background: gradienteBotao, color: '#ffffff', border: 'none', padding: '15px 30px', borderRadius: 10, fontSize: 15, cursor: 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+              Experimentar grátis
             </button>
             <span style={{ color: cores.textoFraco, fontSize: 13 }}>Cancele quando quiser · sem taxa de adesão</span>
           </div>
@@ -213,8 +177,8 @@ function Landing({ onEntrar }) {
             <span style={{ color: cores.textoFraco, fontSize: 14 }}>/mês</span>
           </div>
           <p style={{ color: cores.textoFraco, fontSize: 13, marginBottom: 26 }}>Todos os recursos incluídos. Sem letra miúda.</p>
-          <button onClick={assinar} disabled={assinando} className="supra-cta" style={{ width: '100%', background: gradienteBotao, color: '#ffffff', border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, cursor: assinando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
-            {assinando ? 'Abrindo pagamento...' : 'Começar agora'}
+          <button onClick={onAssinar} className="supra-cta" style={{ width: '100%', background: gradienteBotao, color: '#ffffff', border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, cursor: 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+            Experimentar grátis
           </button>
         </div>
       </div>
