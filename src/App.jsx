@@ -6,6 +6,11 @@ import Landing from './Landing'
 import { cores } from './cores'
 import { useTema } from './theme'
 import { iniciarCheckout, abrirPortal } from './assinatura'
+import PaginaLegal from './PaginaLegal'
+import { TERMOS, PRIVACIDADE } from './legal'
+
+// Páginas públicas, sem roteador: decididas pelo pathname antes de qualquer checagem de login
+const PAGINAS_LEGAIS = { '/termos': TERMOS, '/privacidade': PRIVACIDADE }
 
 // Depoimentos reais de clientes: { texto, nome, empresa, cidade }. A seção só aparece com itens.
 const DEPOIMENTOS = []
@@ -244,6 +249,13 @@ function Cadastro({ onVoltar, onEntrar }) {
 
             {erro && <p style={{ color: '#E8687A', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{erro}</p>}
 
+            <p style={{ fontSize: 12, color: cores.textoFraco, lineHeight: 1.5, textAlign: 'center', margin: '0 0 12px' }}>
+              Ao continuar, você concorda com os{' '}
+              <a href="/termos" target="_blank" rel="noopener noreferrer" style={{ color: cores.azulClaro }}>Termos de Uso</a>
+              {' '}e a{' '}
+              <a href="/privacidade" target="_blank" rel="noopener noreferrer" style={{ color: cores.azulClaro }}>Política de Privacidade</a>
+            </p>
+
             <button onClick={continuar} disabled={carregando} className="cad-cta" style={{ width: '100%', background: `linear-gradient(135deg, ${cores.azulEscuro}, ${cores.azul})`, opacity: carregando ? 0.6 : 1, color: '#ffffff', border: 'none', padding: '14px', borderRadius: 10, fontSize: 15, cursor: carregando ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
               {carregando ? 'Aguarde...' : 'Continuar para o pagamento'}
             </button>
@@ -387,7 +399,7 @@ function SemEmpresa({ t }) {
   )
 }
 
-function App() {
+function Sistema() {
   const { t, modo, alternar } = useTema()
   const [sessao, setSessao] = useState(null)
   const [verificando, setVerificando] = useState(true)
@@ -541,6 +553,12 @@ function App() {
   if (ativando) return <AtivandoConta t={t} modo={modo} />
   if (!acessoLiberado(assinatura)) return <AssinaturaBloqueada t={t} status={assinatura?.status} aviso={avisoAtivacao} />
   return <Dashboard onSair={() => supabase.auth.signOut()} t={t} modo={modo} alternar={alternar} sessao={sessao} empresaId={empresaId} />
+}
+
+function App() {
+  const documentoLegal = PAGINAS_LEGAIS[window.location.pathname.replace(/\/+$/, '')]
+  if (documentoLegal) return <PaginaLegal documento={documentoLegal} />
+  return <Sistema />
 }
 
 export default App

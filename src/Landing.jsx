@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react'
 import { cores } from './cores'
+import { FORNECEDOR, enderecoCompleto } from './legal'
+
+// Identificação do fornecedor exigida pelo Decreto 7.962/2013 (comércio eletrônico)
+const IDENTIFICACAO_FORNECEDOR = [
+  FORNECEDOR.marca,
+  FORNECEDOR.responsavel,
+  FORNECEDOR.documento,
+  enderecoCompleto(),
+  FORNECEDOR.email,
+  `WhatsApp ${FORNECEDOR.whatsapp}`,
+].join(' · ')
 
 const ETAPAS = [
   { n: '01', label: 'Recebido', cor: '#7B8492' },
@@ -84,6 +95,7 @@ function Landing({ onEntrar, onAssinar }) {
         .supra-cta-outline:hover { background: rgba(255,255,255,0.06) !important; }
         .supra-card { transition: transform 0.2s ease, border-color 0.2s ease; }
         .supra-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
+        .supra-link-rodape:hover { color: ${cores.texto} !important; text-decoration: underline !important; }
         @media (max-width: 480px) {
           .supra-topo-btn { padding: 8px 12px !important; font-size: 13px !important; }
         }
@@ -184,7 +196,12 @@ function Landing({ onEntrar, onAssinar }) {
       </div>
 
       <div style={{ borderTop: `1px solid ${cores.borda}`, padding: '24px 32px', textAlign: 'center', color: cores.textoFraco, fontSize: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '8px 20px', marginBottom: 12 }}>
+          <a href="/termos" className="supra-link-rodape" style={{ color: cores.textoSuave, fontSize: 13, textDecoration: 'none' }}>Termos de Uso</a>
+          <a href="/privacidade" className="supra-link-rodape" style={{ color: cores.textoSuave, fontSize: 13, textDecoration: 'none' }}>Política de Privacidade</a>
+        </div>
         Supradesk © {new Date().getFullYear()} — sistema de gestão para assistências técnicas
+        <p style={{ fontSize: 11, lineHeight: 1.6, margin: '8px auto 0', maxWidth: 760, overflowWrap: 'break-word' }}>{IDENTIFICACAO_FORNECEDOR}</p>
       </div>
 
     </div>
