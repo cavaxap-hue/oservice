@@ -22,6 +22,8 @@ const CONFIG_VAZIA = {
   cep: '',
   site: '',
   logo_url: '',
+  texto_comprovante: '',
+  largura_impressora: '80',
 }
 
 function Configuracoes({ t, modo, empresaId }) {
@@ -67,7 +69,7 @@ function Configuracoes({ t, modo, empresaId }) {
     if (data) {
       setConfigId(data.id)
       const campos = {}
-      Object.keys(CONFIG_VAZIA).forEach(k => { campos[k] = data[k] || '' })
+      Object.keys(CONFIG_VAZIA).forEach(k => { campos[k] = data[k] || CONFIG_VAZIA[k] })
       setConfig(campos)
     }
     setCarregando(false)
@@ -222,6 +224,34 @@ function Configuracoes({ t, modo, empresaId }) {
         <div style={{ marginBottom: 24 }}>
           <label style={labelStyle}>CEP</label>
           <input value={config.cep} onChange={e => setConfig({ ...config, cep: e.target.value })} placeholder="89800-000" style={inputStyle} />
+        </div>
+      </div>
+
+      {/* Impressora de comprovante */}
+      <div style={cardStyle}>
+        <p style={{ fontSize: 11, fontWeight: '600', color: t.textoFraco, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px' }}>Impressora de comprovante</p>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Largura do papel</label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { valor: '80', rotulo: '80 mm', dica: 'padrão, mais comum' },
+              { valor: '58', rotulo: '58 mm', dica: 'impressoras compactas' },
+            ].map(op => {
+              const ativo = config.largura_impressora === op.valor
+              return (
+                <label key={op.valor} style={{ flex: '1 1 180px', display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${ativo ? t.azul : t.inputBorda}`, background: ativo ? t.ativoMenu : t.inputBg, borderRadius: 8, padding: '11px 12px', cursor: 'pointer' }}>
+                  <input type="radio" name="largura_impressora" value={op.valor} checked={ativo} onChange={() => setConfig({ ...config, largura_impressora: op.valor })} />
+                  <span style={{ color: t.texto, fontSize: 14, fontWeight: '500' }}>{op.rotulo}</span>
+                  <span style={{ color: t.textoFraco, fontSize: 12 }}>{op.dica}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <label style={labelStyle}>Texto no rodapé do comprovante <span style={{ color: t.textoFraco }}>(opcional)</span></label>
+          <textarea value={config.texto_comprovante} onChange={e => setConfig({ ...config, texto_comprovante: e.target.value })} rows={3} placeholder="Ex: Atendimento de seg. a sex., 8h às 18h. Equipamentos não retirados em 90 dias..." style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
         </div>
       </div>
 

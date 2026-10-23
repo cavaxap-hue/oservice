@@ -6,6 +6,35 @@ import LayoutsClientes from './LayoutsClientes'
 import Preventivas from './Preventivas'
 import Logo from './Logo'
 import { cores, STATUS, STATUS_ABERTOS, STATUS_FINAIS, STATUS_INICIAL } from './theme'
+import Pecas from './Pecas'
+import Estoque from './Estoque'
+import PecasOS from './PecasOS'
+import { imprimirComprovante } from './comprovante'
+import { carregarItensOS, somaItens, escaparHtml } from './estoqueUtil'
+
+const FORM_OS_VAZIO = { cliente: '', telefone: '', tipo: 'Notebook', modelo: '', numero_serie: '', acessorios: '', problema: '', observacoes: '', valor_pecas: '', valor_servico: '', hora_inicio: '', hora_fim: '' }
+
+// Colunas de hora/data/número da OS: o Postgres recusa '' nelas, então vazio (ou NaN) vira null
+const CAMPOS_OS_NAO_TEXTO = ['hora_inicio', 'hora_fim', 'valor_pecas', 'valor_servico', 'valor', 'duracao_minutos', 'fechada_em']
+
+function limparCamposVazios(dados) {
+  const limpo = { ...dados }
+  CAMPOS_OS_NAO_TEXTO.forEach(campo => {
+    if (!(campo in limpo)) return
+    const v = limpo[campo]
+    if (v === undefined || (typeof v === 'string' && v.trim() === '') || Number.isNaN(v)) limpo[campo] = null
+  })
+  return limpo
+}
+
+// Duração em minutos; null se faltar um dos horários ou se o fim não for depois do início
+function minutosEntre(inicio, fim) {
+  if (!inicio || !fim) return null
+  const [hi, mi] = inicio.split(':').map(Number)
+  const [hf, mf] = fim.split(':').map(Number)
+  const total = (hf * 60 + mf) - (hi * 60 + mi)
+  return Number.isFinite(total) && total > 0 ? total : null
+}
 
 function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [tela, setTela] = useState('dashboard')
@@ -13,7 +42,8 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [osEditando, setOsEditando] = useState(null)
-  const [form, setForm] = useState({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor_pecas: '', valor_servico: '', hora_inicio: '', hora_fim: '' })
+  const [pecasDaOSEditando, setPecasDaOSEditando] = useState(null) // { qtd, soma } da OS em edição; null = sem itens
+  const [form, setForm] = useState(FORM_OS_VAZIO)
   const [listaClientes, setListaClientes] = useState([])
   const [mostrarNovoCliente, setMostrarNovoCliente] = useState(false)
   const [novoCliente, setNovoCliente] = useState({ nome: '', telefone: '', email: '', cpf: '', endereco: '' })
@@ -105,8 +135,9 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   async function abrirNovaOS() {
     await carregarClientes()
     setOsEditando(null)
+    setPecasDaOSEditando(null)
     setMostrarNovoCliente(false)
-    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor: '' })
+    setForm(FORM_OS_VAZIO)
     setTela('nova')
   }
 
@@ -122,10 +153,9 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
 
   async function salvarOS() {
     const numero = await proximoNumero()
-    const duracao = calcularDuracao(form.hora_inicio, form.hora_fim)
     const valor_pecas = form.valor_pecas ? parseFloat(form.valor_pecas) : 0
     const valor_servico = form.valor_servico ? parseFloat(form.valor_servico) : 0
-    await supabase.from('ordens').insert([{
+    const { error } = await supabase.from('ordens').insert([limparCamposVazios({
       ...form,
       status: STATUS_INICIAL,
       empresa_id: empresaId,
@@ -133,31 +163,51 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
       valor_pecas,
       valor_servico,
       valor: valor_pecas + valor_servico,
-      duracao_minutos: duracao ? (parseInt(duracao) || null) : null,
-    }])
-    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor_pecas: '', valor_servico: '', hora_inicio: '', hora_fim: '' })
+      numero_serie: form.numero_serie.trim() || null,
+      acessorios: form.acessorios.trim() || null,
+      duracao_minutos: minutosEntre(form.hora_inicio, form.hora_fim),
+    })])
+    // Em caso de erro fica no formulário, para não perder o que foi digitado
+    if (error) {
+      console.error('Erro ao abrir OS:', error)
+      window.alert(`Não foi possível salvar a OS: ${error.message}`)
+      return
+    }
+    setForm(FORM_OS_VAZIO)
     setTela('ordens')
     carregarOrdens()
   }
 
   async function salvarEdicao() {
-    const valor_pecas = form.valor_pecas ? parseFloat(form.valor_pecas) : 0
+    // Com peças lançadas, o valor das peças é sempre a soma dos itens (lida de novo do banco)
+    const valor_pecas = pecasDaOSEditando
+      ? Math.round(somaItens(await carregarItensOS(osEditando.id, empresaId)) * 100) / 100
+      : (form.valor_pecas ? parseFloat(form.valor_pecas) : 0)
     const valor_servico = form.valor_servico ? parseFloat(form.valor_servico) : 0
-    await supabase.from('ordens').update({
+    const { error } = await supabase.from('ordens').update(limparCamposVazios({
       cliente: form.cliente,
       telefone: form.telefone,
       tipo: form.tipo,
       modelo: form.modelo,
+      numero_serie: (form.numero_serie || '').trim() || null,
+      acessorios: (form.acessorios || '').trim() || null,
       problema: form.problema,
       observacoes: form.observacoes,
       valor_pecas,
       valor_servico,
       valor: valor_pecas + valor_servico,
-      hora_inicio: form.hora_inicio || null,
-      hora_fim: form.hora_fim || null,
-    }).eq('id', osEditando.id)
+      hora_inicio: form.hora_inicio,
+      hora_fim: form.hora_fim,
+      duracao_minutos: minutosEntre(form.hora_inicio, form.hora_fim),
+    })).eq('id', osEditando.id)
+    if (error) {
+      console.error('Erro ao salvar OS:', error)
+      window.alert(`Não foi possível salvar a OS: ${error.message}`)
+      return
+    }
     setOsEditando(null)
-    setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor_pecas: '', valor_servico: '', hora_inicio: '', hora_fim: '' })
+    setPecasDaOSEditando(null)
+    setForm(FORM_OS_VAZIO)
     setTela('ordens')
     carregarOrdens()
   }
@@ -172,22 +222,30 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   }
 
   async function excluirOS(id) {
-    if (window.confirm('Tem certeza que deseja excluir esta OS?')) {
+    if (window.confirm('Tem certeza que deseja excluir esta OS? As peças do estoque lançadas nela voltam para o estoque.')) {
+      // Remove os itens antes: o trigger devolve ao estoque o que veio de lá
+      const { error } = await supabase.from('os_pecas').delete().eq('ordem_id', id).eq('empresa_id', empresaId)
+      if (error) { window.alert('Não foi possível remover as peças da OS. Tente novamente.'); return }
       await supabase.from('ordens').delete().eq('id', id)
       carregarOrdens()
     }
   }
 
-  function abrirEdicao(os) {
+  async function abrirEdicao(os) {
+    const itens = await carregarItensOS(os.id, empresaId)
+    const soma = Math.round(somaItens(itens) * 100) / 100
+    setPecasDaOSEditando(itens.length ? { qtd: itens.length, soma } : null)
     setOsEditando(os)
     setForm({
       cliente: os.cliente,
       telefone: os.telefone,
       tipo: os.tipo,
       modelo: os.modelo,
+      numero_serie: os.numero_serie || '',
+      acessorios: os.acessorios || '',
       problema: os.problema,
       observacoes: os.observacoes || '',
-      valor_pecas: os.valor_pecas || '',
+      valor_pecas: itens.length ? soma : (os.valor_pecas || ''),
       valor_servico: os.valor_servico || '',
       hora_inicio: os.hora_inicio || '',
       hora_fim: os.hora_fim || '',
@@ -198,6 +256,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   async function imprimirOS(os) {
     const { data: cfg } = await supabase.from('configuracoes').select('*').eq('empresa_id', empresaId).limit(1).single()
     const empresa = cfg || {}
+    const itens = await carregarItensOS(os.id, empresaId)
     const janela = window.open('', '_blank')
     janela.document.write(`
       <html>
@@ -219,6 +278,10 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
             .rodape { margin-top: 40px; border-top: 1px solid #E0E0E0; padding-top: 12px; font-size: 11px; color: #aaa; display: flex; justify-content: space-between; }
             .assinatura { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 40px; }
             .linha-assinatura { border-top: 1px solid #333; padding-top: 8px; font-size: 12px; color: #666; }
+            .pecas { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+            .pecas th { text-align: left; font-size: 11px; color: #999; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 8px; border-bottom: 1px solid #E0E0E0; }
+            .pecas td { padding: 6px 8px; border-bottom: 1px solid #F0F0F0; color: #333; }
+            .pecas .num { text-align: right; white-space: nowrap; }
           </style>
         </head>
         <body>
@@ -250,9 +313,25 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
             <div class="secao"><label>Equipamento</label><p>${os.tipo} — ${os.modelo}</p></div>
             <div class="secao"><label>Status</label><p><span class="status">${os.status}</span></p></div>
           </div>
+          ${(os.numero_serie || os.acessorios) ? `
+          <div class="grid">
+            ${os.numero_serie ? `<div class="secao"><label>Número de série</label><p>${escaparHtml(os.numero_serie)}</p></div>` : ''}
+            ${os.acessorios ? `<div class="secao"><label>Acessórios deixados</label><p>${escaparHtml(os.acessorios)}</p></div>` : ''}
+          </div>` : ''}
           <div class="secao"><label>Problema relatado</label><p>${os.problema}</p></div>
           ${os.observacoes ? `<div class="secao"><label>Observações técnicas</label><p>${os.observacoes}</p></div>` : ''}
           ${(os.hora_inicio || os.hora_fim) ? `<div class="secao"><label>Horário do atendimento</label><p>${os.hora_inicio || '?'} às ${os.hora_fim || '?'}${(os.hora_inicio && os.hora_fim && calcularDuracao(os.hora_inicio, os.hora_fim)) ? ` (${calcularDuracao(os.hora_inicio, os.hora_fim)})` : ''}</p></div>` : ''}
+          ${itens.length ? `
+          <div class="secao">
+            <label>Peças</label>
+            <table class="pecas">
+              <thead><tr><th>Descrição</th><th class="num">Qtd.</th><th class="num">Preço un.</th><th class="num">Subtotal</th></tr></thead>
+              <tbody>
+                ${itens.map(i => `<tr><td>${escaparHtml(i.descricao)}</td><td class="num">${Number(i.quantidade)}</td><td class="num">R$ ${Number(i.preco_unitario).toFixed(2)}</td><td class="num">R$ ${(Number(i.quantidade) * Number(i.preco_unitario)).toFixed(2)}</td></tr>`).join('')}
+                <tr><td colspan="3" class="num"><b>Total das peças</b></td><td class="num"><b>R$ ${somaItens(itens).toFixed(2)}</b></td></tr>
+              </tbody>
+            </table>
+          </div>` : ''}
           ${(os.valor_pecas > 0 || os.valor_servico > 0 || os.valor) ? `
           <div class="grid">
             ${(os.valor_pecas > 0) ? `<div class="secao"><label>Valor das peças</label><p>R$ ${parseFloat(os.valor_pecas).toFixed(2)}</p></div>` : ''}
@@ -498,6 +577,14 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         <input value={form.modelo} onChange={e => setForm({ ...form, modelo: e.target.value })} type="text" placeholder="Ex: Dell Inspiron 15" style={inputStyle} />
       </div>
       <div style={{ marginBottom: 20 }}>
+        <label style={labelStyle}>Número de série <span style={{ color: t.textoFraco }}>(opcional)</span></label>
+        <input value={form.numero_serie} onChange={e => setForm({ ...form, numero_serie: e.target.value })} type="text" placeholder="Ex: 5CD1234XYZ" style={inputStyle} />
+      </div>
+      <div style={{ marginBottom: 20 }}>
+        <label style={labelStyle}>Acessórios deixados <span style={{ color: t.textoFraco }}>(opcional)</span></label>
+        <input value={form.acessorios} onChange={e => setForm({ ...form, acessorios: e.target.value })} type="text" placeholder="Ex: carregador, capa" style={inputStyle} />
+      </div>
+      <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Problema relatado</label>
         <textarea value={form.problema} onChange={e => setForm({ ...form, problema: e.target.value })} placeholder="Descreva o que o cliente relatou..." rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </div>
@@ -508,7 +595,17 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
       <p style={{ fontSize: 11, fontWeight: '500', color: t.textoFraco, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 20, marginTop: 28 }}>Valores</p>
       <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Valor das peças (R$)</label>
-        <input value={form.valor_pecas} onChange={e => setForm({ ...form, valor_pecas: e.target.value })} type="number" placeholder="0,00" style={inputStyle} />
+        {pecasDaOSEditando ? (
+          <>
+            <input value={pecasDaOSEditando.soma.toFixed(2)} readOnly style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }} />
+            <p style={{ color: t.textoFraco, fontSize: 12, margin: '6px 0 0', textAlign: 'left' }}>Soma das {pecasDaOSEditando.qtd} peça(s) lançada(s). Altere pela seção “Peças” da OS.</p>
+          </>
+        ) : (
+          <input value={form.valor_pecas} onChange={e => setForm({ ...form, valor_pecas: e.target.value })} type="number" placeholder="0,00" style={inputStyle} />
+        )}
+        {!osEditando && (
+          <p style={{ color: t.textoFraco, fontSize: 12, margin: '6px 0 0', textAlign: 'left' }}>Salve a OS para lançar peças.</p>
+        )}
       </div>
       <div style={{ marginBottom: 20 }}>
         <label style={labelStyle}>Valor do serviço (R$)</label>
@@ -537,7 +634,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         </div>
       )}
       <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-        <button onClick={() => { setTela('ordens'); setOsEditando(null); setForm({ cliente: '', telefone: '', tipo: 'Notebook', modelo: '', problema: '', observacoes: '', valor_pecas: '', valor_servico: '' }) }} style={{ background: 'transparent', color: t.textoSuave, border: `1px solid ${t.borda}`, padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
+        <button onClick={() => { setTela('ordens'); setOsEditando(null); setPecasDaOSEditando(null); setForm(FORM_OS_VAZIO) }} style={{ background: 'transparent', color: t.textoSuave, border: `1px solid ${t.borda}`, padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
           Cancelar
         </button>
         <button onClick={osEditando ? salvarEdicao : salvarOS} style={{ background: t.azul, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontWeight: '500' }}>
@@ -808,6 +905,22 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                             <div style={{ color: t.textoSuave, fontSize: 14 }}>{os.observacoes}</div>
                           </div>
                         )}
+                        {(os.numero_serie || os.acessorios) && (
+                          <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
+                            {os.numero_serie && (
+                              <div>
+                                <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>NÚMERO DE SÉRIE</div>
+                                <div style={{ color: t.textoSuave, fontSize: 13, fontFamily: 'monospace' }}>{os.numero_serie}</div>
+                              </div>
+                            )}
+                            {os.acessorios && (
+                              <div>
+                                <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>ACESSÓRIOS DEIXADOS</div>
+                                <div style={{ color: t.textoSuave, fontSize: 13 }}>{os.acessorios}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div style={{ display: 'flex', gap: 20, marginBottom: 16, flexWrap: 'wrap' }}>
                           <div>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>TELEFONE</div>
@@ -850,6 +963,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                             </>
                           )}
                         </div>
+                        <PecasOS t={t} modo={modo} os={os} empresaId={empresaId} onAlterado={carregarOrdens} />
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           {proximoStatusDe(os.status) && (
                             <button onClick={() => mudarStatus(os.id, proximoStatusDe(os.status))} style={{ background: t.azul, color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: '500' }}>→ {proximoStatusDe(os.status)}</button>
@@ -859,6 +973,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                           )}
                           <button onClick={() => abrirEdicao(os)} style={{ background: 'transparent', color: cores.aguardando, border: `1px solid ${cores.aguardando}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✏ Editar</button>
                           <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🖨 Imprimir</button>
+                          <button onClick={() => imprimirComprovante(os, empresaId)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🖨 Imprimir comprovante</button>
                           <button onClick={() => excluirOS(os.id)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🗑 Excluir</button>
                         </div>
                       </div>
@@ -1010,21 +1125,11 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
           </>
         )}
 
-        {/* PEÇAS (em breve) */}
-        {tela === 'pecas' && (
-          <div style={{ color: t.textoFraco, textAlign: 'center', padding: 60 }}>
-            <h1 style={{ color: t.texto, fontSize: 22, fontWeight: '500' }}>Peças</h1>
-            <p>Em breve: cadastro de peças com preço de custo, venda e quantidade.</p>
-          </div>
-        )}
+        {/* PEÇAS */}
+        {tela === 'pecas' && <Pecas t={t} modo={modo} empresaId={empresaId} />}
 
-        {/* ESTOQUE (em breve) */}
-        {tela === 'estoque' && (
-          <div style={{ color: t.textoFraco, textAlign: 'center', padding: 60 }}>
-            <h1 style={{ color: t.texto, fontSize: 22, fontWeight: '500' }}>Estoque</h1>
-            <p>Em breve: controle de entrada de peças e lançamento nas OS.</p>
-          </div>
-        )}
+        {/* ESTOQUE */}
+        {tela === 'estoque' && <Estoque t={t} modo={modo} empresaId={empresaId} />}
 
         {/* CONFIG */}
         {tela === 'config' && <Configuracoes t={t} modo={modo} empresaId={empresaId} />}
