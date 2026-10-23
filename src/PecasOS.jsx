@@ -1,24 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
-import { numero, dinheiro, carregarItensOS, somaItens, mensagemErroEstoque } from './estoqueUtil'
+import { numero, valorMonetario, paraCampo, dinheiro, carregarItensOS, somaItens, mensagemErroEstoque } from './estoqueUtil'
 
 const AVULSA_VAZIA = { descricao: '', quantidade: '1', preco: '', custo: '' }
 
 function arredondar(valor) {
   return Math.round(valor * 100) / 100
-}
-
-// Preço/custo digitado: vazio vira 0, aceita vírgula ("80,50"); texto inválido vira NaN
-function valorMonetario(texto) {
-  if (String(texto ?? '').trim() === '') return 0
-  const valor = numero(texto)
-  return Number.isNaN(valor) ? NaN : arredondar(valor)
-}
-
-// Valor do banco para o campo de texto, com vírgula
-function paraCampo(valor) {
-  return String(Number(valor) || 0).replace('.', ',')
 }
 
 // Seção "Peças" no card expandido da OS. A baixa/devolução de estoque é feita pelo trigger do banco.

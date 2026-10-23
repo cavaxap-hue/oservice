@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
-import { numero, dinheiro, mensagemErroEstoque } from './estoqueUtil'
+import { numero, valorMonetario, paraCampo, dinheiro, mensagemErroEstoque } from './estoqueUtil'
 
 const PECA_VAZIA = { nome: '', codigo: '', preco_custo: '', preco_venda: '', estoque_minimo: '', quantidade_inicial: '' }
 
@@ -32,11 +32,11 @@ function Pecas({ t, modo, empresaId }) {
     if (tipo === 'editar') setForm({
       nome: peca.nome || '',
       codigo: peca.codigo || '',
-      preco_custo: peca.preco_custo ?? '',
-      preco_venda: peca.preco_venda ?? '',
+      preco_custo: paraCampo(peca.preco_custo),
+      preco_venda: paraCampo(peca.preco_venda),
       estoque_minimo: peca.estoque_minimo ?? '',
     })
-    if (tipo === 'entrada') setForm({ quantidade: '', custo: peca.preco_custo ?? '', observacao: '' })
+    if (tipo === 'entrada') setForm({ quantidade: '', custo: peca.preco_custo != null ? paraCampo(peca.preco_custo) : '', observacao: '' })
     if (tipo === 'ajuste') setForm({ nova_quantidade: String(Number(peca.quantidade) || 0), motivo: '' })
     setAcao({ tipo, peca })
   }
@@ -53,10 +53,13 @@ function Pecas({ t, modo, empresaId }) {
 
   async function salvarPeca() {
     if (!form.nome.trim()) { setErro('Informe o nome da peça.'); return }
-    const custo = valorOuZero(form.preco_custo)
-    const venda = valorOuZero(form.preco_venda)
+    // Vazio vira 0; vírgula aceita; texto inválido não é trocado por 0 em silêncio
+    const custo = valorMonetario(form.preco_custo)
+    const venda = valorMonetario(form.preco_venda)
+    if (Number.isNaN(custo) || custo < 0) { setErro('Preço de custo inválido. Use só números, ex.: 80,50'); return }
+    if (Number.isNaN(venda) || venda < 0) { setErro('Preço de venda inválido. Use só números, ex.: 80,50'); return }
     const minimo = valorOuZero(form.estoque_minimo)
-    if (custo < 0 || venda < 0 || minimo < 0) { setErro('Valores não podem ser negativos.'); return }
+    if (minimo < 0) { setErro('Valores não podem ser negativos.'); return }
     const dados = { nome: form.nome.trim(), codigo: form.codigo.trim() || null, preco_custo: custo, preco_venda: venda, estoque_minimo: minimo }
 
     setSalvando(true)
@@ -89,14 +92,16 @@ function Pecas({ t, modo, empresaId }) {
   async function registrarEntrada() {
     const quantidade = numero(form.quantidade)
     if (!Number.isInteger(quantidade) || quantidade <= 0) { setErro('Informe uma quantidade inteira maior que zero.'); return }
-    const custo = numero(form.custo)
-    if (!Number.isNaN(custo) && custo < 0) { setErro('Custo não pode ser negativo.'); return }
+    // Custo opcional: em branco vai null ("não informado"), não 0
+    const custoInformado = String(form.custo ?? '').trim() !== ''
+    const custo = custoInformado ? valorMonetario(form.custo) : null
+    if (custoInformado && (Number.isNaN(custo) || custo < 0)) { setErro('Custo inválido. Use só números, ex.: 80,50'); return }
     setSalvando(true)
     setErro('')
     const { error } = await supabase.rpc('estoque_entrada', {
       p_peca: acao.peca.id,
       p_quantidade: quantidade,
-      p_custo: Number.isNaN(custo) ? null : custo,
+      p_custo: custo,
       p_obs: form.observacao.trim() || null,
     })
     setSalvando(false)
@@ -236,8 +241,8 @@ function Pecas({ t, modo, empresaId }) {
                 {campo('nome', 'Nome', { placeholder: 'Ex: SSD 240GB Kingston' })}
                 {campo('codigo', 'Código (opcional)', { placeholder: 'Ex: SSD240' })}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {campo('preco_custo', 'Preço de custo (R$)', { type: 'number', min: 0, step: '0.01', placeholder: '0,00' })}
-                  {campo('preco_venda', 'Preço de venda (R$)', { type: 'number', min: 0, step: '0.01', placeholder: '0,00' })}
+                  {campo('preco_custo', 'Preço de custo (R$)', { type: 'text', inputMode: 'decimal', placeholder: '0,00' })}
+                  {campo('preco_venda', 'Preço de venda (R$)', { type: 'text', inputMode: 'decimal', placeholder: '0,00' })}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {campo('estoque_minimo', 'Estoque mínimo', { type: 'number', min: 0, step: '1', placeholder: '0' })}
@@ -252,7 +257,7 @@ function Pecas({ t, modo, empresaId }) {
             {acao.tipo === 'entrada' && (
               <>
                 {campo('quantidade', 'Quantidade que entrou', { type: 'number', min: 1, step: '1', placeholder: 'Ex: 5', autoFocus: true })}
-                {campo('custo', 'Custo unitário (R$, opcional)', { type: 'number', min: 0, step: '0.01', placeholder: '0,00' })}
+                {campo('custo', 'Custo unitário (R$, opcional)', { type: 'text', inputMode: 'decimal', placeholder: '0,00' })}
                 {campo('observacao', 'Observação (opcional)', { placeholder: 'Ex: NF 1234, fornecedor X' })}
               </>
             )}

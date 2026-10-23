@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import Clientes from './Clientes'
 import Configuracoes from './Configuracoes'
@@ -36,6 +36,28 @@ function minutosEntre(inicio, fim) {
   return Number.isFinite(total) && total > 0 ? total : null
 }
 
+// "184", "0184" ou "#0184" → 184; qualquer outra coisa → null
+function numeroDaBusca(texto) {
+  const limpo = String(texto || '').trim().replace(/^#/, '')
+  return /^\d+$/.test(limpo) ? Number(limpo) : null
+}
+
+// Busca da lista de OS: número da OS, cliente, modelo, nº de série ou telefone
+function osCorrespondeBusca(os, texto) {
+  const termo = String(texto || '').trim().toLowerCase()
+  if (!termo) return true
+  const numero = numeroDaBusca(termo)
+  if (numero !== null && Number(os.numero) === numero) return true
+  return [os.cliente, os.modelo, os.numero_serie].some(campo => String(campo || '').toLowerCase().includes(termo)) ||
+    String(os.telefone || '').includes(termo)
+}
+
+// Início do defeito para listas, com reticências
+function resumoDefeito(texto, limite = 90) {
+  const linha = String(texto || '').replace(/\s+/g, ' ').trim()
+  return linha.length > limite ? linha.slice(0, limite).trimEnd() + '…' : linha
+}
+
 function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [tela, setTela] = useState('dashboard')
   const [ordens, setOrdens] = useState([])
@@ -50,6 +72,11 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [relInicio, setRelInicio] = useState('')
   const [relFim, setRelFim] = useState('')
   const [relStatus, setRelStatus] = useState('')
+  const [buscaHist, setBuscaHist] = useState('')
+  const [resultadoHist, setResultadoHist] = useState(null) // { tipo: 'numero' | 'cliente', termo, ordens }
+  const [clienteHist, setClienteHist] = useState('') // nome exato escolhido quando a busca acha vários clientes
+  const [buscandoHist, setBuscandoHist] = useState(false)
+  const rolarParaOS = useRef(null) // id da OS a mostrar quando a lista renderizar
   const [hoverCard, setHoverCard] = useState(null)
   const [menuMobileAberto, setMenuMobileAberto] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -70,6 +97,41 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
     carregarOrdens()
     carregarClientes()
   }, [])
+
+  // Depois de abrir uma OS vinda da busca do histórico, rola até o card dela
+  useEffect(() => {
+    if (!rolarParaOS.current || tela !== 'ordens') return
+    const el = document.getElementById(`os-${rolarParaOS.current}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      rolarParaOS.current = null
+    }
+  }, [tela, ordens, osExpandida])
+
+  async function buscarHistorico() {
+    const termo = buscaHist.trim()
+    if (!termo) { setResultadoHist(null); return }
+    setBuscandoHist(true)
+    setClienteHist('')
+    const numero = numeroDaBusca(termo)
+    let consulta = supabase.from('ordens').select('*').eq('empresa_id', empresaId)
+    if (numero !== null) consulta = consulta.eq('numero', numero)
+    else consulta = consulta.ilike('cliente', `%${termo.replace(/[\\%_]/g, '\\$&')}%`)
+    const { data, error } = await consulta.order('created_at', { ascending: false })
+    if (error) console.error('Erro na busca de OS:', error)
+    setResultadoHist({ tipo: numero !== null ? 'numero' : 'cliente', termo, ordens: data || [], erro: error ? error.message : null })
+    setBuscandoHist(false)
+  }
+
+  // Leva para a lista de OS com essa OS expandida, sem filtros que a escondam
+  async function abrirOSDaBusca(os) {
+    rolarParaOS.current = os.id
+    setBusca('')
+    setFiltroStatus('')
+    setOsExpandida(os.id)
+    if (!ordens.some(o => o.id === os.id)) await carregarOrdens()
+    setTela('ordens')
+  }
 
   async function carregarClientes() {
     const { data } = await supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nome', { ascending: true })
@@ -381,9 +443,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   }
 
   const ordensFiltradas = ordens.filter(o => {
-    const buscaOk = o.cliente.toLowerCase().includes(busca.toLowerCase()) ||
-      o.modelo.toLowerCase().includes(busca.toLowerCase()) ||
-      o.telefone.includes(busca)
+    const buscaOk = osCorrespondeBusca(o, busca)
     let filtroOk
     if (filtroStatus === '__abertos__') filtroOk = STATUS_ABERTOS.includes(o.status)
     else if (filtroStatus === '') filtroOk = true
@@ -475,6 +535,26 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
       if (o.status === 'Entregue' && o.valor) mapa[nome].receita += parseFloat(o.valor)
     })
     return Object.values(mapa).sort((a, b) => b.qtd - a.qtd).slice(0, 10)
+  })()
+
+  // ===== BUSCA DE OS / HISTÓRICO DO CLIENTE =====
+  const chaveCliente = nome => String(nome || '').trim().toLowerCase()
+  const histClientes = resultadoHist?.tipo === 'cliente'
+    ? [...new Map(resultadoHist.ordens.map(o => [chaveCliente(o.cliente), String(o.cliente || '').trim() || 'Sem nome'])).entries()]
+    : []
+  const histOrdens = resultadoHist
+    ? resultadoHist.ordens.filter(o => !clienteHist || chaveCliente(o.cliente) === clienteHist)
+    : []
+  const histResumo = (() => {
+    if (resultadoHist?.tipo !== 'cliente' || histOrdens.length === 0) return null
+    const datas = histOrdens.map(o => new Date(o.created_at).getTime())
+    return {
+      total: histOrdens.length,
+      emAberto: histOrdens.filter(o => STATUS_ABERTOS.includes(o.status)).length,
+      gasto: histOrdens.filter(o => o.status === 'Entregue').reduce((acc, o) => acc + (Number(o.valor) || 0), 0),
+      primeiro: new Date(Math.min(...datas)),
+      ultimo: new Date(Math.max(...datas)),
+    }
   })()
 
   // estilos reutilizáveis
@@ -611,7 +691,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         <label style={labelStyle}>Valor do serviço (R$)</label>
         <input value={form.valor_servico} onChange={e => setForm({ ...form, valor_servico: e.target.value })} type="number" placeholder="0,00" style={inputStyle} />
       </div>
-      {(form.valor_pecas || form.valor_servico) && (
+      {(Number(form.valor_pecas) > 0 || Number(form.valor_servico) > 0) && (
         <div style={{ background: modo === 'dark' ? 'rgba(29,158,117,0.12)' : '#E8F5EE', borderRadius: 8, padding: '10px 14px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: t.textoSuave, fontSize: 13 }}>Total</span>
           <span style={{ color: cores.pronto, fontSize: 18, fontWeight: '600' }}>R$ {((parseFloat(form.valor_pecas) || 0) + (parseFloat(form.valor_servico) || 0)).toFixed(2)}</span>
@@ -855,7 +935,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente, modelo ou telefone..." style={inputStyle} />
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nº da OS, cliente, modelo, nº de série ou telefone..." style={inputStyle} />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -868,7 +948,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                 const { cor, bg } = statusInfo(os.status)
                 const expandido = osExpandida === os.id
                 return (
-                  <div key={os.id} style={{ background: t.card, borderRadius: 12, border: `1px solid ${expandido ? cor : t.cardBorda}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                  <div key={os.id} id={`os-${os.id}`} style={{ background: t.card, borderRadius: 12, border: `1px solid ${expandido ? cor : t.cardBorda}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                     {/* Cabeçalho do card — sempre visível */}
                     <div onClick={() => setOsExpandida(expandido ? null : os.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
                       <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -884,51 +964,58 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                           <span style={{ background: bg, color: cor, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: '500' }}>{STATUS[os.status]?.icone} {os.status}</span>
                           <span style={{ color: t.textoFraco, fontSize: 11 }}>{diasAberta(os.created_at)}</span>
-                          {os.valor && <span style={{ color: cores.pronto, fontSize: 12, fontWeight: '500' }}>R$ {parseFloat(os.valor).toFixed(2)}</span>}
+                          {Number(os.valor) > 0 && <span style={{ color: cores.pronto, fontSize: 12, fontWeight: '500' }}>R$ {parseFloat(os.valor).toFixed(2)}</span>}
                         </div>
+                        {!expandido && resumoDefeito(os.problema) !== '' && (
+                          <div style={{ color: t.textoFraco, fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {resumoDefeito(os.problema, 140)}
+                          </div>
+                        )}
                       </div>
                       <span style={{ color: t.textoFraco, fontSize: 18, flexShrink: 0, transform: expandido ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>⌄</span>
                     </div>
 
                     {/* Detalhes — só quando expandido */}
                     {expandido && (
-                      <div style={{ borderTop: `1px solid ${t.cardBorda}`, padding: '16px 16px 16px 32px' }}>
-                        {os.problema && (
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 4 }}>PROBLEMA RELATADO</div>
-                            <div style={{ color: t.textoSuave, fontSize: 14 }}>{os.problema}</div>
+                      <div style={{ borderTop: `1px solid ${t.cardBorda}`, padding: isMobile ? 14 : '16px 16px 16px 32px' }}>
+                        {/* Defeito relatado em destaque */}
+                        <div style={{ background: bg, borderLeft: `5px solid ${cor}`, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+                          <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 6 }}>🔧 DEFEITO RELATADO</div>
+                          <div style={{ color: t.texto, fontSize: 16, fontWeight: '500', lineHeight: 1.45, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                            {os.problema && os.problema.trim() !== '' ? os.problema : <span style={{ color: t.textoFraco, fontWeight: 'normal', fontSize: 14 }}>Não informado</span>}
                           </div>
-                        )}
-                        {os.observacoes && (
-                          <div style={{ marginBottom: 12 }}>
+                        </div>
+
+                        {/* Equipamento: só os campos preenchidos */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 20px', marginBottom: 14 }}>
+                          {[
+                            { rotulo: 'EQUIPAMENTO', valor: os.tipo },
+                            { rotulo: 'MARCA / MODELO', valor: os.modelo },
+                            { rotulo: 'NÚMERO DE SÉRIE', valor: os.numero_serie, mono: true },
+                            { rotulo: 'ACESSÓRIOS DEIXADOS', valor: os.acessorios },
+                          ].filter(c => c.valor && String(c.valor).trim() !== '').map(c => (
+                            <div key={c.rotulo} style={{ minWidth: 0 }}>
+                              <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>{c.rotulo}</div>
+                              <div style={{ color: t.textoSuave, fontSize: 13, fontFamily: c.mono ? 'monospace' : 'inherit', overflowWrap: 'anywhere' }}>{c.valor}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {os.observacoes && os.observacoes.trim() !== '' && (
+                          <div style={{ border: `1px solid ${t.cardBorda}`, borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 4 }}>OBSERVAÇÕES TÉCNICAS</div>
-                            <div style={{ color: t.textoSuave, fontSize: 14 }}>{os.observacoes}</div>
+                            <div style={{ color: t.textoSuave, fontSize: 14, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{os.observacoes}</div>
                           </div>
                         )}
-                        {(os.numero_serie || os.acessorios) && (
-                          <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                            {os.numero_serie && (
-                              <div>
-                                <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>NÚMERO DE SÉRIE</div>
-                                <div style={{ color: t.textoSuave, fontSize: 13, fontFamily: 'monospace' }}>{os.numero_serie}</div>
-                              </div>
-                            )}
-                            {os.acessorios && (
-                              <div>
-                                <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>ACESSÓRIOS DEIXADOS</div>
-                                <div style={{ color: t.textoSuave, fontSize: 13 }}>{os.acessorios}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', gap: 20, marginBottom: 16, flexWrap: 'wrap' }}>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px 20px', marginBottom: 16, paddingTop: 12, borderTop: `1px solid ${t.cardBorda}` }}>
                           <div>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>TELEFONE</div>
                             <div style={{ color: t.textoSuave, fontSize: 13 }}>{os.telefone || '—'}</div>
                           </div>
                           <div>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>VALOR</div>
-                            <div style={{ color: os.valor ? cores.pronto : t.textoFraco, fontSize: 13, fontWeight: '500' }}>{os.valor ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}</div>
+                            <div style={{ color: Number(os.valor) > 0 ? cores.pronto : t.textoFraco, fontSize: 13, fontWeight: '500' }}>{Number(os.valor) > 0 ? `R$ ${parseFloat(os.valor).toFixed(2)}` : '—'}</div>
                           </div>
                           <div>
                             <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>DATA DE ABERTURA</div>
@@ -950,7 +1037,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                               <div style={{ color: t.textoSuave, fontSize: 13 }}>{os.hora_inicio || '?'} → {os.hora_fim || '?'} {os.hora_inicio && os.hora_fim && calcularDuracao(os.hora_inicio, os.hora_fim) ? `(${calcularDuracao(os.hora_inicio, os.hora_fim)})` : ''}</div>
                             </div>
                           )}
-                          {(os.valor_pecas > 0 || os.valor_servico > 0) && (
+                          {(Number(os.valor_pecas) > 0 || Number(os.valor_servico) > 0) && (
                             <>
                               <div>
                                 <div style={{ color: t.textoFraco, fontSize: 11, letterSpacing: '0.04em', marginBottom: 2 }}>PEÇAS</div>
@@ -972,8 +1059,8 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                             <button onClick={() => mudarStatus(os.id, 'Não aprovado')} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>Não aprovado</button>
                           )}
                           <button onClick={() => abrirEdicao(os)} style={{ background: 'transparent', color: cores.aguardando, border: `1px solid ${cores.aguardando}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✏ Editar</button>
-                          <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🖨 Imprimir</button>
-                          <button onClick={() => imprimirComprovante(os, empresaId)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🖨 Imprimir comprovante</button>
+                          <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>📄 PDF da OS</button>
+                          <button onClick={() => imprimirComprovante(os, empresaId)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🧾 Cupom térmico</button>
                           <button onClick={() => excluirOS(os.id)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🗑 Excluir</button>
                         </div>
                       </div>
@@ -1013,6 +1100,88 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
             <div style={{ marginBottom: 22 }}>
               <h1 style={{ color: t.texto, fontSize: 22, fontWeight: '500', margin: 0 }}>Relatórios</h1>
               <p style={{ color: t.textoFraco, fontSize: 13, margin: '4px 0 0' }}>Acompanhe os números da sua assistência</p>
+            </div>
+
+            {/* Buscar OS / histórico do cliente */}
+            <div style={{ background: t.card, border: `1px solid ${t.cardBorda}`, borderRadius: 12, padding: 18, marginBottom: 20 }}>
+              <div style={{ color: t.textoSuave, fontSize: 14, fontWeight: '500', marginBottom: 4 }}>Buscar OS / histórico do cliente</div>
+              <div style={{ color: t.textoFraco, fontSize: 12, marginBottom: 14 }}>Digite o nº da OS (ex.: 184 ou #0184) ou o nome do cliente</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: resultadoHist ? 16 : 0 }}>
+                <input value={buscaHist} onChange={e => setBuscaHist(e.target.value)} onKeyDown={e => e.key === 'Enter' && buscarHistorico()} placeholder="Nº da OS ou nome do cliente..." style={{ ...inputStyle, flex: 1 }} />
+                <button onClick={buscarHistorico} disabled={buscandoHist} style={{ background: t.azul, color: '#fff', border: 'none', padding: '0 18px', borderRadius: 8, fontSize: 14, cursor: buscandoHist ? 'not-allowed' : 'pointer', fontWeight: '500', opacity: buscandoHist ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                  {buscandoHist ? 'Buscando...' : 'Buscar'}
+                </button>
+                {resultadoHist && (
+                  <button onClick={() => { setBuscaHist(''); setResultadoHist(null); setClienteHist('') }} style={{ background: 'transparent', color: t.textoSuave, border: `1px solid ${t.borda}`, padding: '0 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Limpar</button>
+                )}
+              </div>
+
+              {resultadoHist && (
+                resultadoHist.erro ? (
+                  <div style={{ color: cores.perigo, fontSize: 13 }}>Erro na busca: {resultadoHist.erro}</div>
+                ) : resultadoHist.ordens.length === 0 ? (
+                  <div style={{ color: t.textoFraco, fontSize: 13, padding: '8px 0' }}>
+                    {resultadoHist.tipo === 'numero' ? `Nenhuma OS com o número ${resultadoHist.termo}.` : `Nenhum cliente encontrado com "${resultadoHist.termo}".`}
+                  </div>
+                ) : (
+                  <>
+                    {histClientes.length > 1 && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ color: t.textoFraco, fontSize: 12, marginBottom: 8 }}>{histClientes.length} clientes encontrados. Escolha um para ver só o histórico dele:</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {[['', 'Todos'], ...histClientes].map(([chave, nome]) => {
+                            const ativo = clienteHist === chave
+                            return (
+                              <button key={chave || '__todos__'} onClick={() => setClienteHist(chave)} style={{ background: ativo ? t.azul : 'transparent', color: ativo ? '#fff' : t.textoSuave, border: `1px solid ${ativo ? t.azul : t.borda}`, borderRadius: 20, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }}>{nome}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {histResumo && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+                        {[
+                          { rotulo: 'TOTAL DE OS', valor: histResumo.total },
+                          { rotulo: 'EM ABERTO', valor: histResumo.emAberto, cor: histResumo.emAberto > 0 ? cores.aguardando : undefined },
+                          { rotulo: 'TOTAL GASTO (ENTREGUES)', valor: `R$ ${histResumo.gasto.toFixed(2)}`, cor: cores.pronto },
+                          { rotulo: 'PRIMEIRO ATENDIMENTO', valor: histResumo.primeiro.toLocaleDateString('pt-BR') },
+                          { rotulo: 'ÚLTIMO ATENDIMENTO', valor: histResumo.ultimo.toLocaleDateString('pt-BR') },
+                        ].map(c => (
+                          <div key={c.rotulo} style={{ ...cardStyle, padding: 12 }}>
+                            <div style={{ color: t.textoFraco, fontSize: 10, letterSpacing: '0.04em', marginBottom: 6 }}>{c.rotulo}</div>
+                            <div style={{ color: c.cor || t.texto, fontSize: 18, fontWeight: '500' }}>{c.valor}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {histOrdens.map(o => {
+                        const { cor, bg } = statusInfo(o.status)
+                        return (
+                          <div key={o.id} onClick={() => abrirOSDaBusca(o)} title="Abrir esta OS" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.cardBorda}`, borderLeft: `4px solid ${cor}`, cursor: 'pointer', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                            <span style={{ color: t.textoFraco, fontFamily: 'monospace', fontSize: 12, flexShrink: 0 }}>#{String(o.numero || 0).padStart(4, '0')}</span>
+                            <span style={{ color: t.textoSuave, fontSize: 12, flexShrink: 0 }}>{new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ color: t.texto, fontSize: 13, fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {[o.tipo, o.modelo].filter(Boolean).join(' ')}{resultadoHist.tipo === 'numero' || histClientes.length > 1 ? ` · ${o.cliente || 'Sem nome'}` : ''}
+                              </div>
+                              {resumoDefeito(o.problema) !== '' && (
+                                <div style={{ color: t.textoFraco, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumoDefeito(o.problema)}</div>
+                              )}
+                            </div>
+                            <span style={{ background: bg, color: cor, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: '500', whiteSpace: 'nowrap', flexShrink: 0 }}>{STATUS[o.status]?.icone} {o.status}</span>
+                            <span style={{ color: Number(o.valor) > 0 ? cores.pronto : t.textoFraco, fontSize: 13, fontWeight: '500', minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
+                              {Number(o.valor) > 0 ? `R$ ${parseFloat(o.valor).toFixed(2)}` : '—'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )
+              )}
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>

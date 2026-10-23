@@ -6,6 +6,18 @@ export function numero(valor) {
   return Number(String(valor).replace(',', '.'))
 }
 
+// Preço/custo digitado: vazio vira 0, aceita vírgula ("80,50"), arredonda em 2 casas; texto inválido vira NaN
+export function valorMonetario(texto) {
+  if (String(texto ?? '').trim() === '') return 0
+  const valor = numero(texto)
+  return Number.isNaN(valor) ? NaN : Math.round(valor * 100) / 100
+}
+
+// Valor do banco para o campo de texto, com vírgula
+export function paraCampo(valor) {
+  return String(Number(valor) || 0).replace('.', ',')
+}
+
 export function dinheiro(valor) {
   return `R$ ${(Number(valor) || 0).toFixed(2)}`
 }
