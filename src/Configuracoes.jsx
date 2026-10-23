@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import { cores } from './theme'
+import { abrirPortal } from './assinatura'
+
+const NOMES_STATUS = {
+  pendente: 'Aguardando pagamento',
+  trial: 'Teste grátis',
+  ativa: 'Ativa',
+  inadimplente: 'Pagamento em atraso',
+  cancelada: 'Cancelada',
+}
 
 const CONFIG_VAZIA = {
   nome_empresa: '',
@@ -22,10 +31,35 @@ function Configuracoes({ t, modo, empresaId }) {
   const [uploadando, setUploadando] = useState(false)
   const [mensagem, setMensagem] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  const [assinatura, setAssinatura] = useState(null)
+  const [abrindoPortal, setAbrindoPortal] = useState(false)
+  const [erroPortal, setErroPortal] = useState('')
 
   useEffect(() => {
     carregarConfig()
+    carregarAssinatura()
   }, [])
+
+  async function carregarAssinatura() {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('status_assinatura, assinatura_valida_ate, stripe_customer_id')
+      .eq('id', empresaId)
+      .maybeSingle()
+    if (error) console.error('Erro ao buscar assinatura:', error)
+    setAssinatura(data)
+  }
+
+  async function gerenciarAssinatura() {
+    setErroPortal('')
+    setAbrindoPortal(true)
+    try {
+      await abrirPortal()
+    } catch (e) {
+      setErroPortal(e.message)
+      setAbrindoPortal(false)
+    }
+  }
 
   async function carregarConfig() {
     // Só a config da empresa logada; se ainda não existir, o formulário abre vazio
@@ -200,6 +234,33 @@ function Configuracoes({ t, modo, empresaId }) {
       <button onClick={salvarConfig} disabled={salvando} style={{ background: salvando ? t.textoFraco : t.azul, color: '#fff', border: 'none', padding: '12px 28px', borderRadius: 10, fontSize: 15, cursor: salvando ? 'not-allowed' : 'pointer', fontWeight: '500', boxShadow: `0 4px 14px ${modo === 'dark' ? 'rgba(55,138,221,0.35)' : 'rgba(24,95,165,0.25)'}` }}>
         {salvando ? 'Salvando...' : '💾 Salvar configurações'}
       </button>
+
+      {/* Assinatura */}
+      {assinatura && (
+        <div style={{ ...cardStyle, marginTop: 32 }}>
+          <p style={{ fontSize: 11, fontWeight: '600', color: t.textoFraco, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 16px' }}>Assinatura</p>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10, fontSize: 14 }}>
+            <span style={{ color: t.textoSuave }}>Status</span>
+            <span style={{ color: t.texto, fontWeight: '500' }}>{NOMES_STATUS[assinatura.status_assinatura] || assinatura.status_assinatura || '—'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
+            <span style={{ color: t.textoSuave }}>{assinatura.status_assinatura === 'trial' ? 'Teste grátis até' : 'Válida até'}</span>
+            <span style={{ color: t.texto, fontWeight: '500' }}>
+              {assinatura.assinatura_valida_ate ? new Date(assinatura.assinatura_valida_ate).toLocaleDateString('pt-BR') : 'Sem vencimento'}
+            </span>
+          </div>
+
+          {assinatura.stripe_customer_id && (
+            <>
+              {erroPortal && <p style={{ color: cores.perigo, fontSize: 13, margin: '16px 0 0' }}>{erroPortal}</p>}
+              <button onClick={gerenciarAssinatura} disabled={abrindoPortal} style={{ marginTop: 20, background: 'transparent', color: t.azul, border: `1px solid ${t.azul}`, padding: '10px 20px', borderRadius: 8, fontSize: 14, cursor: abrindoPortal ? 'not-allowed' : 'pointer', fontWeight: '500', opacity: abrindoPortal ? 0.6 : 1 }}>
+                {abrindoPortal ? 'Abrindo...' : 'Gerenciar assinatura'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

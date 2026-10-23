@@ -1,6 +1,9 @@
 import Stripe from 'stripe'
+import { empresaDoUsuario } from './_empresa-do-usuario.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
+const STATUS_LIBERADOS = ['trial', 'ativa']
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -8,11 +11,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, empresa_id } = req.body
+    // A empresa vem do usuario autenticado, nunca do body
+    const { usuario, empresa, status, error } = await empresaDoUsuario(req)
+    if (error) return res.status(status).json({ error })
 
-    if (!email || !empresa_id) {
-      return res.status(400).json({ error: 'email e empresa_id sao obrigatorios' })
+    if (STATUS_LIBERADOS.includes(empresa.status_assinatura)) {
+      return res.status(400).json({ error: 'Sua assinatura já está ativa' })
     }
+
+    const empresaId = String(empresa.id)
+    // Teste gratis so para quem nunca teve assinatura; quem cancelou e volta assina direto
+    const nuncaAssinou = !empresa.stripe_subscription_id
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -23,12 +32,14 @@ export default async function handler(req, res) {
           quantity: 1,
         },
       ],
-      customer_email: email,
-      client_reference_id: String(empresa_id),
-      metadata: { empresa_id: String(empresa_id) },
+      ...(empresa.stripe_customer_id
+        ? { customer: empresa.stripe_customer_id }
+        : { customer_email: usuario.email }),
+      client_reference_id: empresaId,
+      metadata: { empresa_id: empresaId },
       subscription_data: {
-        trial_period_days: 7,
-        metadata: { empresa_id: String(empresa_id) },
+        ...(nuncaAssinou ? { trial_period_days: 7 } : {}),
+        metadata: { empresa_id: empresaId },
       },
       success_url: `${req.headers.origin}/?assinatura=sucesso&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.origin}/?assinatura=cancelado`,

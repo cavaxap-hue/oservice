@@ -37,7 +37,112 @@ async function buscarUsuarioPorEmail(email) {
   }
 }
 
-const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000
+const EVENTOS_ASSINATURA = new Set([
+  'checkout.session.completed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'invoice.paid',
+  'invoice.payment_failed',
+])
+
+const STATUS_POR_STRIPE = {
+  trialing: 'trial',
+  active: 'ativa',
+  past_due: 'inadimplente',
+  unpaid: 'inadimplente',
+  paused: 'inadimplente',
+  canceled: 'cancelada',
+  incomplete: 'pendente',
+  incomplete_expired: 'pendente',
+}
+
+// Assinaturas que nao voltam mais: nunca substituem outra assinatura ja vinculada a empresa
+const STATUS_STRIPE_FINAIS = ['canceled', 'incomplete_expired']
+
+// Campos expansiveis chegam como id (string) ou como objeto
+function idDe(valor) {
+  return typeof valor === 'string' ? valor : valor?.id || null
+}
+
+function extrairSubscriptionId(objeto) {
+  if (objeto.object === 'subscription') return objeto.id
+  if (objeto.object === 'checkout.session') return idDe(objeto.subscription)
+  if (objeto.object === 'invoice') {
+    // API nova (basil+): invoice.parent.subscription_details.subscription; antiga: invoice.subscription
+    return idDe(objeto.parent?.subscription_details?.subscription) || idDe(objeto.subscription)
+  }
+  return null
+}
+
+// trial_end durante o teste; senao o fim do periodo (API nova: no item; antiga: na subscription)
+function calcularValidaAte(subscription) {
+  const fim = subscription.status === 'trialing' && subscription.trial_end
+    ? subscription.trial_end
+    : subscription.items?.data?.[0]?.current_period_end ?? subscription.current_period_end
+  return fim ? new Date(fim * 1000).toISOString() : null
+}
+
+const CAMPOS_EMPRESA = 'id, status_assinatura, stripe_subscription_id'
+
+async function buscarEmpresaPor(coluna, valor) {
+  if (!valor) return null
+  const { data, error } = await supabaseAdmin
+    .from('empresas')
+    .select(CAMPOS_EMPRESA)
+    .eq(coluna, valor)
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+async function encontrarEmpresa(subscription, empresaIdSessao) {
+  return (
+    (await buscarEmpresaPor('stripe_subscription_id', subscription.id)) ||
+    (await buscarEmpresaPor('id', subscription.metadata?.empresa_id)) ||
+    (await buscarEmpresaPor('id', empresaIdSessao)) ||
+    (await buscarEmpresaPor('stripe_customer_id', idDe(subscription.customer)))
+  )
+}
+
+// Sempre le o estado atual da subscription no Stripe: eventos podem chegar fora de ordem ou repetidos
+async function sincronizarAssinatura(subscriptionId, empresaIdSessao, tipoEvento) {
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const empresa = await encontrarEmpresa(subscription, empresaIdSessao)
+  if (!empresa) {
+    console.error('Empresa nao encontrada para a subscription', subscription.id, `(${tipoEvento})`)
+    return
+  }
+
+  if (
+    empresa.stripe_subscription_id &&
+    empresa.stripe_subscription_id !== subscription.id &&
+    STATUS_STRIPE_FINAIS.includes(subscription.status)
+  ) {
+    console.log('Ignorando subscription encerrada', subscription.id, 'da empresa', empresa.id, '- vinculada a', empresa.stripe_subscription_id)
+    return
+  }
+
+  const novoStatus = STATUS_POR_STRIPE[subscription.status]
+  if (!novoStatus) {
+    console.error('Status de subscription desconhecido:', subscription.status, subscription.id)
+    return
+  }
+
+  const { error } = await supabaseAdmin
+    .from('empresas')
+    .update({
+      status_assinatura: novoStatus,
+      assinatura_valida_ate: calcularValidaAte(subscription),
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: idDe(subscription.customer),
+    })
+    .eq('id', empresa.id)
+  if (error) throw error
+
+  console.log(`Assinatura empresa ${empresa.id}: ${empresa.status_assinatura} → ${novoStatus} (${tipoEvento}, ${subscription.id})`)
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -55,31 +160,30 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`)
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object
-    const empresaId = session.client_reference_id || session.metadata?.empresa_id
+  if (!EVENTOS_ASSINATURA.has(event.type)) {
+    return res.status(200).json({ received: true })
+  }
 
-    // Fluxo novo: usuario e empresa ja foram criados em /api/criar-conta
-    if (empresaId) {
-      const { data: atualizadas, error: errUpdate } = await supabaseAdmin
-        .from('empresas')
-        .update({
-          stripe_customer_id: session.customer,
-          stripe_subscription_id: session.subscription,
-          status_assinatura: 'trial',
-          assinatura_valida_ate: new Date(Date.now() + SETE_DIAS_MS).toISOString(),
-        })
-        .eq('id', empresaId)
-        .eq('status_assinatura', 'pendente') // nunca rebaixa empresa 'ativa'/'trial'
-        .select('id')
-      if (errUpdate) {
-        console.error('Erro ao ativar trial da empresa', empresaId, errUpdate)
-        return res.status(500).json({ error: errUpdate.message })
-      }
-      if (!atualizadas?.length) console.error('Empresa da sessao nao encontrada ou nao esta pendente:', empresaId, session.id)
-      else console.log('Trial ativado para empresa:', empresaId)
+  const objeto = event.data.object
+  const empresaIdSessao = event.type === 'checkout.session.completed'
+    ? objeto.client_reference_id || objeto.metadata?.empresa_id || null
+    : null
+
+  // Fluxo novo (e todos os eventos de subscription/invoice): sincroniza com o estado atual no Stripe
+  if (event.type !== 'checkout.session.completed' || empresaIdSessao) {
+    const subscriptionId = extrairSubscriptionId(objeto)
+    if (!subscriptionId) return res.status(200).json({ received: true })
+    try {
+      await sincronizarAssinatura(subscriptionId, empresaIdSessao, event.type)
       return res.status(200).json({ received: true })
+    } catch (err) {
+      console.error('Erro ao sincronizar assinatura', subscriptionId, `(${event.type}):`, err)
+      return res.status(500).json({ error: err.message })
     }
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = objeto
 
     // Fallback (fluxo antigo): sessao sem empresa_id, cria usuario/empresa a partir do email
     const email = (session.customer_email || session.customer_details?.email || '').trim().toLowerCase()

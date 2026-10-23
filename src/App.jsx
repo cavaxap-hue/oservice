@@ -5,6 +5,7 @@ import Logo from './Logo'
 import Landing from './Landing'
 import { cores } from './cores'
 import { useTema } from './theme'
+import { iniciarCheckout, abrirPortal } from './assinatura'
 
 // Depoimentos reais de clientes: { texto, nome, empresa, cidade }. A seção só aparece com itens.
 const DEPOIMENTOS = []
@@ -95,16 +96,13 @@ function Login({ t, modo, alternar, onVoltar }) {
 }
 
 const STATUS_LIBERADOS = ['trial', 'ativa']
+const TOLERANCIA_MS = 3 * 24 * 60 * 60 * 1000
 
-async function iniciarCheckout(email, empresaId) {
-  const resp = await fetch('/api/create-checkout-session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, empresa_id: empresaId }),
-  })
-  const data = await resp.json().catch(() => ({}))
-  if (!resp.ok || !data.url) throw new Error(data.error || 'Não foi possível abrir o pagamento.')
-  window.location.href = data.url
+// Validade nula = sem limite (empresas criadas manualmente)
+function acessoLiberado(assinatura) {
+  if (!assinatura || !STATUS_LIBERADOS.includes(assinatura.status)) return false
+  if (!assinatura.validaAte) return true
+  return new Date(assinatura.validaAte).getTime() + TOLERANCIA_MS > Date.now()
 }
 
 function limparParametrosAssinatura() {
@@ -168,7 +166,7 @@ function Cadastro({ onVoltar, onEntrar }) {
 
     setCarregando(true)
     try {
-      await iniciarCheckout(conta.email, conta.empresaId)
+      await iniciarCheckout()
     } catch (e) {
       setErro(`Conta criada! ${e.message} Clique em continuar para tentar de novo.`)
       setCarregando(false)
@@ -331,15 +329,25 @@ function AtivandoConta({ t, modo }) {
   )
 }
 
-function AssinaturaPendente({ t, sessao, empresaId, aviso }) {
+// trial/ativa só chegam aqui com a validade vencida (além da tolerância): mesmo caso de cobrança falha
+const BLOQUEIOS = {
+  pendente: { titulo: 'Assinatura pendente', texto: 'Falta cadastrar o pagamento para começar seus 7 dias grátis.', botao: 'Concluir assinatura', acao: iniciarCheckout },
+  inadimplente: { titulo: 'Pagamento não aprovado', texto: 'Não conseguimos cobrar seu cartão. Atualize a forma de pagamento para voltar a usar.', botao: 'Atualizar cartão', acao: abrirPortal },
+  cancelada: { titulo: 'Assinatura cancelada', texto: 'Sua assinatura foi cancelada. Seus dados continuam guardados.', botao: 'Assinar novamente', acao: iniciarCheckout },
+}
+BLOQUEIOS.trial = BLOQUEIOS.inadimplente
+BLOQUEIOS.ativa = BLOQUEIOS.inadimplente
+
+function AssinaturaBloqueada({ t, status, aviso }) {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
+  const bloqueio = BLOQUEIOS[status] || BLOQUEIOS.pendente
 
-  async function concluir() {
+  async function executar() {
     setErro('')
     setCarregando(true)
     try {
-      await iniciarCheckout(sessao.user.email, empresaId)
+      await bloqueio.acao()
     } catch (e) {
       setErro(e.message)
       setCarregando(false)
@@ -350,15 +358,15 @@ function AssinaturaPendente({ t, sessao, empresaId, aviso }) {
     <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: t.card, padding: 40, borderRadius: 16, border: `1px solid ${t.cardBorda}`, maxWidth: 400, textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>💳</div>
-        <h2 style={{ color: t.texto, marginBottom: 12 }}>Assinatura pendente</h2>
+        <h2 style={{ color: t.texto, marginBottom: 12 }}>{bloqueio.titulo}</h2>
         <p style={{ color: t.textoFraco, fontSize: 14 }}>
           {aviso
             ? 'Ainda não recebemos a confirmação do pagamento. Se você acabou de pagar, aguarde alguns instantes e recarregue a página.'
-            : 'Para usar o Supradesk, conclua a assinatura. São 7 dias grátis e a primeira cobrança só acontece depois do teste.'}
+            : bloqueio.texto}
         </p>
         {erro && <p style={{ color: '#E24B4A', fontSize: 13, marginTop: 16 }}>{erro}</p>}
-        <button onClick={concluir} disabled={carregando} style={{ marginTop: 24, width: '100%', background: carregando ? t.textoFraco : t.azul, color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontSize: 15, cursor: carregando ? 'not-allowed' : 'pointer', fontWeight: '500' }}>
-          {carregando ? 'Abrindo pagamento...' : 'Concluir assinatura'}
+        <button onClick={executar} disabled={carregando} style={{ marginTop: 24, width: '100%', background: carregando ? t.textoFraco : t.azul, color: '#fff', border: 'none', padding: '12px', borderRadius: 8, fontSize: 15, cursor: carregando ? 'not-allowed' : 'pointer', fontWeight: '500' }}>
+          {carregando ? 'Abrindo...' : bloqueio.botao}
         </button>
         <button onClick={() => supabase.auth.signOut()} style={{ marginTop: 12, background: 'transparent', border: 'none', color: t.textoFraco, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>Sair</button>
       </div>
@@ -391,7 +399,7 @@ function App() {
   const [novaSenhaMsg, setNovaSenhaMsg] = useState('')
   const [mostrarLogin, setMostrarLogin] = useState(false)
   const [mostrarCadastro, setMostrarCadastro] = useState(false)
-  const [statusAssinatura, setStatusAssinatura] = useState(null)
+  const [assinatura, setAssinatura] = useState(null) // { status, validaAte }
   const [ativando, setAtivando] = useState(false)
   const [avisoAtivacao, setAvisoAtivacao] = useState(false)
   const veioDeRecovery = typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
@@ -416,7 +424,7 @@ function App() {
       }
       setSessao(session)
       if (session) buscarEmpresa(session.user.id)
-      else { setEmpresaId(null); setStatusAssinatura(null); setVerificando(false) }
+      else { setEmpresaId(null); setAssinatura(null); setVerificando(false) }
     })
     return () => listener.subscription.unsubscribe()
   }, [])
@@ -427,10 +435,10 @@ function App() {
     let tentativas = 0
     const id = setInterval(async () => {
       tentativas++
-      const status = await buscarStatusAssinatura(empresaId)
-      if (STATUS_LIBERADOS.includes(status)) {
+      const atual = await buscarAssinatura(empresaId)
+      if (acessoLiberado(atual)) {
         clearInterval(id)
-        setStatusAssinatura(status)
+        setAssinatura(atual)
         setAtivando(false)
         limparParametrosAssinatura()
       } else if (tentativas >= 20) {
@@ -443,14 +451,14 @@ function App() {
     return () => clearInterval(id)
   }, [ativando, empresaId])
 
-  async function buscarStatusAssinatura(idEmpresa) {
+  async function buscarAssinatura(idEmpresa) {
     const { data, error } = await supabase
       .from('empresas')
-      .select('status_assinatura')
+      .select('status_assinatura, assinatura_valida_ate')
       .eq('id', idEmpresa)
       .maybeSingle()
     if (error) console.error('Erro ao buscar status da assinatura:', error)
-    return data?.status_assinatura || null
+    return { status: data?.status_assinatura || null, validaAte: data?.assinatura_valida_ate || null }
   }
 
   async function buscarEmpresa(userId) {
@@ -461,12 +469,12 @@ function App() {
       .eq('user_id', userId)
       .single()
     const idEmpresa = data?.empresa_id || null
-    const status = idEmpresa ? await buscarStatusAssinatura(idEmpresa) : null
+    const atual = idEmpresa ? await buscarAssinatura(idEmpresa) : null
     setEmpresaId(idEmpresa)
-    setStatusAssinatura(status)
+    setAssinatura(atual)
 
     const retornoStripe = new URLSearchParams(window.location.search).get('assinatura')
-    if (retornoStripe === 'sucesso' && idEmpresa && !STATUS_LIBERADOS.includes(status)) setAtivando(true)
+    if (retornoStripe === 'sucesso' && idEmpresa && !acessoLiberado(atual)) setAtivando(true)
     else if (retornoStripe) limparParametrosAssinatura()
 
     setBuscandoEmpresa(false)
@@ -531,7 +539,7 @@ function App() {
   }
   if (!empresaId) return <SemEmpresa t={t} />
   if (ativando) return <AtivandoConta t={t} modo={modo} />
-  if (!STATUS_LIBERADOS.includes(statusAssinatura)) return <AssinaturaPendente t={t} sessao={sessao} empresaId={empresaId} aviso={avisoAtivacao} />
+  if (!acessoLiberado(assinatura)) return <AssinaturaBloqueada t={t} status={assinatura?.status} aviso={avisoAtivacao} />
   return <Dashboard onSair={() => supabase.auth.signOut()} t={t} modo={modo} alternar={alternar} sessao={sessao} empresaId={empresaId} />
 }
 
