@@ -63,6 +63,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
   const [ordens, setOrdens] = useState([])
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroOrigem, setFiltroOrigem] = useState('') // '' = todas, 'atendimento' ou 'preventiva'
   const [osEditando, setOsEditando] = useState(null)
   const [pecasDaOSEditando, setPecasDaOSEditando] = useState(null) // { qtd, soma } da OS em edição; null = sem itens
   const [form, setForm] = useState(FORM_OS_VAZIO)
@@ -128,6 +129,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
     rolarParaOS.current = os.id
     setBusca('')
     setFiltroStatus('')
+    setFiltroOrigem('')
     setOsExpandida(os.id)
     if (!ordens.some(o => o.id === os.id)) await carregarOrdens()
     setTela('ordens')
@@ -283,8 +285,10 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
     carregarOrdens()
   }
 
-  async function excluirOS(id) {
-    if (window.confirm('Tem certeza que deseja excluir esta OS? As peças do estoque lançadas nela voltam para o estoque.')) {
+  async function excluirOS(os) {
+    const id = os.id
+    const avisoPreventiva = os.origem === 'preventiva' ? '\n\nEsta OS veio de uma preventiva. A preventiva continua registrada no equipamento.' : ''
+    if (window.confirm('Tem certeza que deseja excluir esta OS? As peças do estoque lançadas nela voltam para o estoque.' + avisoPreventiva)) {
       // Remove os itens antes: o trigger devolve ao estoque o que veio de lá
       const { error } = await supabase.from('os_pecas').delete().eq('ordem_id', id).eq('empresa_id', empresaId)
       if (error) { window.alert('Não foi possível remover as peças da OS. Tente novamente.'); return }
@@ -369,10 +373,10 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
 
           <div class="grid">
             <div class="secao"><label>Cliente</label><p>${os.cliente}</p></div>
-            <div class="secao"><label>Telefone</label><p>${os.telefone}</p></div>
+            <div class="secao"><label>Telefone</label><p>${os.telefone || ''}</p></div>
           </div>
           <div class="grid">
-            <div class="secao"><label>Equipamento</label><p>${os.tipo} — ${os.modelo}</p></div>
+            <div class="secao"><label>Equipamento</label><p>${[os.tipo, os.modelo].filter(Boolean).join(' — ')}</p></div>
             <div class="secao"><label>Status</label><p><span class="status">${os.status}</span></p></div>
           </div>
           ${(os.numero_serie || os.acessorios) ? `
@@ -380,7 +384,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
             ${os.numero_serie ? `<div class="secao"><label>Número de série</label><p>${escaparHtml(os.numero_serie)}</p></div>` : ''}
             ${os.acessorios ? `<div class="secao"><label>Acessórios deixados</label><p>${escaparHtml(os.acessorios)}</p></div>` : ''}
           </div>` : ''}
-          <div class="secao"><label>Problema relatado</label><p>${os.problema}</p></div>
+          <div class="secao"><label>Problema relatado</label><p>${os.problema || ''}</p></div>
           ${os.observacoes ? `<div class="secao"><label>Observações técnicas</label><p>${os.observacoes}</p></div>` : ''}
           ${(os.hora_inicio || os.hora_fim) ? `<div class="secao"><label>Horário do atendimento</label><p>${os.hora_inicio || '?'} às ${os.hora_fim || '?'}${(os.hora_inicio && os.hora_fim && calcularDuracao(os.hora_inicio, os.hora_fim)) ? ` (${calcularDuracao(os.hora_inicio, os.hora_fim)})` : ''}</p></div>` : ''}
           ${itens.length ? `
@@ -448,7 +452,8 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
     if (filtroStatus === '__abertos__') filtroOk = STATUS_ABERTOS.includes(o.status)
     else if (filtroStatus === '') filtroOk = true
     else filtroOk = o.status === filtroStatus
-    return buscaOk && filtroOk
+    const origemOk = filtroOrigem === '' || (o.origem || 'atendimento') === filtroOrigem
+    return buscaOk && filtroOk && origemOk
   })
 
   const totalReceita = ordens.filter(o => o.status === 'Entregue' && o.valor).reduce((acc, o) => acc + parseFloat(o.valor), 0)
@@ -934,15 +939,20 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
               })}
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nº da OS, cliente, modelo, nº de série ou telefone..." style={inputStyle} />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nº da OS, cliente, modelo, nº de série ou telefone..." style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+              <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} title="Origem da OS" style={{ ...inputStyle, width: isMobile ? '100%' : 'auto', flexShrink: 0, cursor: 'pointer' }}>
+                <option value="">Todas</option>
+                <option value="atendimento">Atendimentos</option>
+                <option value="preventiva">Preventivas</option>
+              </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {ordensFiltradas.length === 0 ? (
                 <div style={{ background: t.card, borderRadius: 12, border: `1px solid ${t.cardBorda}`, padding: 48, textAlign: 'center', color: t.textoFraco }}>
-                  <p style={{ fontSize: 16, marginBottom: 8 }}>{busca ? 'Nenhuma OS encontrada' : 'Nenhuma OS cadastrada ainda'}</p>
-                  <p style={{ fontSize: 13 }}>{busca ? 'Tente outro termo' : 'Clique em + Nova OS para começar'}</p>
+                  <p style={{ fontSize: 16, marginBottom: 8 }}>{(busca || filtroOrigem) ? 'Nenhuma OS encontrada' : 'Nenhuma OS cadastrada ainda'}</p>
+                  <p style={{ fontSize: 13 }}>{busca ? 'Tente outro termo' : filtroOrigem ? 'Tente outro filtro' : 'Clique em + Nova OS para começar'}</p>
                 </div>
               ) : ordensFiltradas.map((os) => {
                 const { cor, bg } = statusInfo(os.status)
@@ -960,6 +970,9 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                           <span style={{ color: t.texto, fontWeight: '500', fontSize: 14 }}>{os.cliente}</span>
                           <span style={{ color: t.textoFraco, fontSize: 12 }}>•</span>
                           <span style={{ color: t.textoSuave, fontSize: 13 }}>{os.tipo} {os.modelo}</span>
+                          {os.origem === 'preventiva' && (
+                            <span title="OS criada a partir de uma preventiva" style={{ background: hexParaRgba(cores.pronto, 0.15), color: cores.pronto, border: `1px solid ${hexParaRgba(cores.pronto, 0.4)}`, padding: '1px 8px', borderRadius: 20, fontSize: 11, fontWeight: '500', whiteSpace: 'nowrap' }}>🛡 Preventiva</span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                           <span style={{ background: bg, color: cor, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: '500' }}>{STATUS[os.status]?.icone} {os.status}</span>
@@ -1061,7 +1074,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
                           <button onClick={() => abrirEdicao(os)} style={{ background: 'transparent', color: cores.aguardando, border: `1px solid ${cores.aguardando}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✏ Editar</button>
                           <button onClick={() => imprimirOS(os)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>📄 PDF da OS</button>
                           <button onClick={() => imprimirComprovante(os, empresaId)} style={{ background: 'transparent', color: cores.reparo, border: `1px solid ${cores.reparo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🧾 Cupom térmico</button>
-                          <button onClick={() => excluirOS(os.id)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🗑 Excluir</button>
+                          <button onClick={() => excluirOS(os)} style={{ background: 'transparent', color: cores.perigo, border: `1px solid ${cores.perigo}`, padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>🗑 Excluir</button>
                         </div>
                       </div>
                     )}
@@ -1092,7 +1105,7 @@ function Dashboard({ onSair, t, modo, alternar, sessao, empresaId }) {
         {tela === 'layouts' && <LayoutsClientes t={t} modo={modo} empresaId={empresaId} />}
 
         {/* PREVENTIVAS */}
-        {tela === 'preventivas' && <Preventivas t={t} modo={modo} empresaId={empresaId} />}
+        {tela === 'preventivas' && <Preventivas t={t} modo={modo} empresaId={empresaId} onAbrirOS={id => abrirOSDaBusca({ id })} onOrdensAlteradas={carregarOrdens} />}
 
         {/* RELATÓRIOS */}
         {tela === 'relatorios' && (

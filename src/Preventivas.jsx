@@ -191,13 +191,27 @@ async function gerarRelatorioPdf({ empresa, cliente, eq, p }) {
   doc.save(`relatorio-preventiva-${nomeArquivo(eq.identificacao) || 'equipamento'}-${p.data_executada || ''}.pdf`)
 }
 
-function Preventivas({ t, modo, empresaId }) {
+// Número da OS no formato #0001
+function rotuloOS(numero) {
+  return 'OS #' + String(numero || 0).padStart(4, '0')
+}
+
+// Erros lançados pelo trigger do banco ao gravar a preventiva
+function mensagemErroPreventiva(error) {
+  const msg = (error && error.message) || ''
+  if (msg.includes('EQUIPAMENTO_INVALIDO')) return 'Este equipamento não pertence à sua empresa.'
+  if (msg.includes('CLIENTE_INVALIDO')) return 'Este cliente não pertence à sua empresa.'
+  return msg
+}
+
+function Preventivas({ t, modo, empresaId, onAbrirOS, onOrdensAlteradas }) {
   const [erro, setErro] = useState('')
   const [clientes, setClientes] = useState([])
   const [busca, setBusca] = useState('')
   const [clienteAberto, setClienteAberto] = useState(null)
   const [equipamentos, setEquipamentos] = useState([])
   const [historico, setHistorico] = useState([]) // preventivas do cliente aberto
+  const [numerosOS, setNumerosOS] = useState({}) // ordem_id -> numero da OS vinculada
   const [equipExpandido, setEquipExpandido] = useState(null) // id do equipamento aberto no accordion
   const [mostrarFormEquip, setMostrarFormEquip] = useState(false) // form de cadastro novo
   const [editandoEquip, setEditandoEquip] = useState(null) // id do equipamento em edição
@@ -238,13 +252,22 @@ function Preventivas({ t, modo, empresaId }) {
   async function carregarEquipamentos(clienteId) {
     const { data: eq } = await supabase.from('equipamentos_cliente').select('*').eq('empresa_id', empresaId).eq('cliente_id', clienteId).order('identificacao', { ascending: true })
     const { data: prev } = await supabase.from('preventivas').select('*').eq('empresa_id', empresaId).eq('cliente_id', clienteId).order('data_executada', { ascending: false }).order('created_at', { ascending: false })
+    const ids = [...new Set((prev || []).map(p => p.ordem_id).filter(Boolean))]
+    let numeros = {}
+    if (ids.length) {
+      const { data: os } = await supabase.from('ordens').select('id, numero').eq('empresa_id', empresaId).in('id', ids)
+      for (const o of os || []) numeros[o.id] = o.numero
+    }
     setEquipamentos(eq || [])
     setHistorico(prev || [])
+    setNumerosOS(numeros)
   }
 
+  // O trigger cria/atualiza/apaga a OS vinculada, então a lista de OS do Dashboard também muda
   function recarregar() {
     carregarEquipamentos(clienteAberto.id)
     carregarAlertas()
+    if (onOrdensAlteradas) onOrdensAlteradas()
   }
 
   function fecharFormularios() {
@@ -307,7 +330,9 @@ function Preventivas({ t, modo, empresaId }) {
   }
 
   async function excluirEquipamento(eq) {
-    if (!window.confirm(`Excluir o equipamento "${eq.identificacao}" e todo o histórico de preventivas dele?`)) return
+    const qtdOS = historico.filter(p => p.equipamento_id === eq.id && p.ordem_id).length
+    const avisoOS = qtdOS ? (qtdOS === 1 ? '\n\nA OS vinculada a esta preventiva também será excluída.' : `\n\nAs ${qtdOS} OS vinculadas a essas preventivas também serão excluídas.`) : ''
+    if (!window.confirm(`Excluir o equipamento "${eq.identificacao}" e todo o histórico de preventivas dele?${avisoOS}`)) return
     await supabase.from('preventivas').delete().eq('equipamento_id', eq.id).eq('empresa_id', empresaId)
     const { error } = await supabase.from('equipamentos_cliente').delete().eq('id', eq.id).eq('empresa_id', empresaId)
     if (error) window.alert('Erro ao excluir equipamento: ' + error.message)
@@ -334,7 +359,7 @@ function Preventivas({ t, modo, empresaId }) {
     if (!formPrev.o_que_foi_feito.trim()) { window.alert('Descreva o que foi feito.'); return }
     setSalvando(true)
     const proxima = formPrev.proxima_prevista || null
-    const { error } = await supabase.from('preventivas').insert([{
+    const { data: nova, error } = await supabase.from('preventivas').insert([{
       empresa_id: empresaId,
       equipamento_id: registrando.id,
       cliente_id: clienteAberto.id,
@@ -342,11 +367,19 @@ function Preventivas({ t, modo, empresaId }) {
       o_que_foi_feito: formPrev.o_que_foi_feito.trim(),
       tecnico: formPrev.tecnico.trim(),
       proxima_prevista: proxima,
-    }])
-    if (error) { setSalvando(false); window.alert('Erro ao registrar preventiva: ' + error.message); return }
+    }]).select('ordem_id').single()
+    if (error) { setSalvando(false); window.alert('Erro ao registrar preventiva: ' + mensagemErroPreventiva(error)); return }
+    // O trigger já criou a OS e gravou o ordem_id na preventiva
+    let numeroOS = null
+    if (nova && nova.ordem_id) {
+      const { data: os } = await supabase.from('ordens').select('numero').eq('id', nova.ordem_id).eq('empresa_id', empresaId).maybeSingle()
+      if (os) numeroOS = os.numero
+    }
     const { error: errEq } = await supabase.from('equipamentos_cliente').update({ proxima_preventiva: proxima }).eq('id', registrando.id).eq('empresa_id', empresaId)
     setSalvando(false)
-    if (errEq) window.alert('Preventiva registrada, mas não foi possível atualizar a próxima data do equipamento: ' + errEq.message)
+    const registrada = numeroOS !== null ? `Preventiva registrada e ${rotuloOS(numeroOS)} criada` : 'Preventiva registrada'
+    if (errEq) window.alert(registrada + ', mas não foi possível atualizar a próxima data do equipamento: ' + errEq.message)
+    else window.alert(registrada + '.')
     setRegistrando(null)
     recarregar()
   }
@@ -377,7 +410,7 @@ function Preventivas({ t, modo, empresaId }) {
       tecnico: formEditPrev.tecnico.trim(),
       proxima_prevista: proxima,
     }).eq('id', editandoPrev).eq('empresa_id', empresaId)
-    if (error) { setSalvando(false); window.alert('Erro ao salvar preventiva: ' + error.message); return }
+    if (error) { setSalvando(false); window.alert('Erro ao salvar preventiva: ' + mensagemErroPreventiva(error)); return }
     if (formEditPrev.atualizarEquip) {
       const { error: errEq } = await supabase.from('equipamentos_cliente').update({ proxima_preventiva: proxima }).eq('id', eq.id).eq('empresa_id', empresaId)
       if (errEq) window.alert('Preventiva salva, mas não foi possível atualizar a próxima data do equipamento: ' + errEq.message)
@@ -388,7 +421,10 @@ function Preventivas({ t, modo, empresaId }) {
   }
 
   async function excluirPreventiva(p) {
-    if (!window.confirm(`Excluir a preventiva de ${formatarData(p.data_executada)}?`)) return
+    const avisoOS = p.ordem_id
+      ? `\n\nA ${numerosOS[p.ordem_id] !== undefined ? rotuloOS(numerosOS[p.ordem_id]) : 'OS'} vinculada também será excluída.`
+      : ''
+    if (!window.confirm(`Excluir a preventiva de ${formatarData(p.data_executada)}?${avisoOS}`)) return
     const { error } = await supabase.from('preventivas').delete().eq('id', p.id).eq('empresa_id', empresaId)
     if (error) { window.alert('Erro ao excluir preventiva: ' + error.message); return }
     if (editandoPrev === p.id) setEditandoPrev(null)
@@ -609,6 +645,11 @@ function Preventivas({ t, modo, empresaId }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: t.texto, fontSize: 13, fontWeight: '500' }}>✅ {formatarData(p.data_executada)}</span>
           {p.tecnico && <span style={{ color: t.textoFraco, fontSize: 12 }}>🔧 {p.tecnico}</span>}
+          {p.ordem_id && numerosOS[p.ordem_id] !== undefined && (
+            <button onClick={() => onAbrirOS && onAbrirOS(p.ordem_id)} title="Abrir a OS desta preventiva" style={{ background: 'transparent', border: 'none', padding: 0, color: t.azul, fontSize: 12, fontFamily: 'monospace', textDecoration: 'underline', cursor: 'pointer' }}>
+              {rotuloOS(numerosOS[p.ordem_id])}
+            </button>
+          )}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <button onClick={() => gerarRelatorio(eq, p)} disabled={gerandoPdf === p.id} title="Baixar relatório em PDF" style={{ ...btnSecundario, padding: '3px 8px', borderRadius: 6, fontSize: 11, cursor: gerandoPdf === p.id ? 'wait' : 'pointer' }}>{gerandoPdf === p.id ? 'Gerando...' : '📄 Gerar relatório'}</button>
             <button onClick={() => abrirEdicaoPrev(p)} title="Editar preventiva" style={{ ...btnSecundario, padding: '3px 8px', borderRadius: 6, fontSize: 11 }}>✏️ Editar</button>
